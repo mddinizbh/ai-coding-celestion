@@ -44,6 +44,8 @@ export function openStore(dbPath) {
   }
   ensureParentDir(dbPath);
   const db = new DatabaseSync(dbPath);
+  db.exec("PRAGMA busy_timeout = 5000;");
+  db.exec("PRAGMA journal_mode = WAL;");
   try {
     db.exec("PRAGMA foreign_keys = ON;");
     migrateLayerTableNames(db, StoreError);

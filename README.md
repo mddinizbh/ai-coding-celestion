@@ -39,6 +39,20 @@ mesmo jeito e as terceiros ficam pra depois.
 Pré-requisito do L0 (uma vez por máquina): `node skills/explorer-l0/cli.mjs setup`
 — instala `graphifyy==0.9.32` via `uv tool`.
 
+## Pacote de modelos
+
+| Papel | Tier recomendado | Quem define |
+|---|---|---|
+| explorer-worker | barato/rápido (qualquer default) | membro local |
+| explorer-matcher | médio (claude-sonnet-4-5 default) | repo (override local) |
+| explorer-synth | frontier/amplo contexto | membro local |
+
+Mínimo viável: configure nada — tudo roda no seu modelo default (mais caro, mas funciona).
+
+Recomendado: três tiers distintos no seu `~/.config/opencode`.
+
+Override local: edite `~/.config/opencode/opencode.jsonc` (ou o arquivo de config do seu agente) e mapeie os roles para os models do seu pacote. O repo só entrega os papéis.
+
 ## Usar (pipeline explorer)
 
 Cada um indexa o repositório **dele**. Merge de grafo é no namespace do

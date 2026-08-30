@@ -62,6 +62,57 @@ pré-carregada, qualquer um adiciona repo/atualiza, grafo sempre da master).
 - Quando o time sentir a dor de N máquinas dessincronizadas, plugar o adapter
   compartilhado sem tocar nas skills
 
+### [GAP] Config-map vira artefato derivado (extrator de values + template)
+
+**Decisão:** config-map deixa de ser input manuscrito e vira artefato derivado
+com ciclo `candidate → Human Gate → confirmado`. O mapeamento é
+`env_var → logical_repo` — **agnóstico de ambiente** (muda o host entre
+dev/prod, não muda quem atende). Por isso um perfil local mantido como cópia
+do dev (padrão bootstrap-local) é evidência válida: o que o map precisa é
+**quem atende**, não a URL.
+
+- Extrator lê values literais de `application*.yml/json`, `bootstrap*.yml`,
+  `.env` → hostname → match exato contra `logical_repo` do sistema
+- Casa única → entrada no candidate com evidência `file:line`;
+  casa ambígua → **não propõe**, vira gap listado;
+  sem match (localhost) → silêncio (dado ruim gera ausência, nunca entrada errada)
+- `--emit-config-map-template` a partir de `unmapped_config_keys` (esqueleto
+  com valores vazios — transforma caçada em preenchimento)
+- Onde não há evidência em repo (config server externo sem cópia local,
+  gateway de outro time) permanece **manual por design**: convenção de deploy
+  varia por empresa e conhecimento fora do código indexado só entra por humano
+- ⚠️ Risco empírico: hostname ≠ nome de repo (segmentos de ambiente, paths de
+  gateway). Regras de match explícitas + o gate do candidate cobrem a primeira
+  adoção; hit-rate só se sabe com repos reais
+
+### [GAP] llm-assisted frontier (LLM localiza, bytes provam)
+
+Para o que o extrator determinístico não pega — o caso-mestre: Spring Cloud
+Stream, onde `streamBridge.send("binding")` liga ao tópico via
+`bindings.{name}.destination` no YAML. A ligação é semântica (convenção de
+framework); o valor final é byte.
+
+- Fluxo: extrator roda → call-sites suspeitos (imports presentes, 0 fatos)
+  viram fila → 1 subagente LLM por call-site, payload fechado com cadeia de
+  evidência (`file:line` por link) → **validador determinístico por tipo de
+  fato** re-deriva cada link dos bytes pinados (parser YAML existente, leitor
+  Git pinado)
+- Política de gate (refinada — links verificados não provam a cola semântica
+  da cadeia):
+  - **Padrão novo (primeiras ocorrências):** humano confirma a **cadeia**
+    inteira, não só os links
+  - **Padrão já codificado:** auto-accept com proveniência
+    `llm-assisted+verified` (aditivo, sem migração)
+  - Link não verificável → fato não nasce; vira hipótese/gap
+- Proveniência separada na coverage (taxa `llm-assisted` própria) — se 40% do
+  grafo vier dessa rota, tem que estar visível
+- Determinismo/convergência: cache de fatos verificados keyado por
+  `revisão + hash dos bytes`; run frio pode divergir (LLM é estocástico no
+  dispatch), convergência vem de cache + wipe do restitch (P0) + codificação
+- **Loop de convergência:** mesmo padrão resolvido N vezes → candidate adapter
+  (1 arquivo + teste, como `go-huma`) → próxima indexação é extrator puro.
+  O llm-assisted é bootstrap do extrator, não muleta permanente
+
 ---
 
 ## P2 — fechar o roster
@@ -95,16 +146,63 @@ Motorista do pipeline (só depois de P0/P1 fechados). Mesmo padrão fino do
 - Skills de escrita ficam **bloqueadas** para os demais agents
   (`explorer-query` continua liberada — é leitura, e o `brainstorm` usa)
 
+### [SKILL] setup — onboarding guiado do template
+
+**Decisão:** depois de skills/agents construídos, testados e instalados, o
+README aponta pra **uma skill `/setup`** que guia a configuração local de ponta
+a ponta — em vez de documentação espalhada pra seguir à mão. README fica
+magro: `install` → `rode /setup`.
+
+A skill checa estado e conduz, nessa ordem:
+
+1. Pré-requisitos — node, `uv`, `graphifyy==0.9.32` (reaproveita os comandos
+   `setup`/`setup-status` que já existem; roda com confirmação)
+2. **Pacote de modelos** — binding dos 3 papéis (worker/matcher/synth) no
+   `~/.config/opencode` do membro, checando o que já existe e oferecendo
+   mínimo viável (1 modelo) vs recomendado (3 tiers)
+3. Store sanity — path do SQLite, stores existentes, freshness deles
+4. Smoke final — convenções confirmadas (namespace/master/Human Gate) e
+   primeira consulta rodando
+
+Onde mora: `skills/setup/` (mesmo padrão fino; só orquestra comandos que já
+existem — nada de lógica nova de negócio). Última peça do fluxo do time:
+só construir quando installer cleanup e papéis estiverem fechados.
+
 ### [AGENT] Resto do roster (futuro)
 
 `arquiteto → planner → orchestrator (coder → reviewer → tester)`. Mesmo
 padrão fino: frontmatter com allow-list, contratos em `contracts/`,
 skill de terceiros só na allow-list da peça.
 
+
+
 ---
 
 ## Feitos (para não reabrir)
 
+- ~~[P2] SQLite hardening~~ — WAL + `busy_timeout=5000` nos dois opens (L0 e
+  L1); teste de contenção real (holder em processo separado segura o lock,
+  writer espera ~1s e sucede — sem BUSY). Fan-out de N indexers no mesmo
+  namespace é seguro
+- ~~[P2] 3 papéis + pacote de modelos~~ — `explorer-worker` (barato),
+  `explorer-matcher` (tier médio default pinado no repo), `explorer-synth`
+  (frontier) — binding real é local de cada membro; README documenta mínimo
+  viável vs recomendado
+- ~~[P1] Stale visível na consulta~~ — `explorer-query freshness` (baseline vs
+  HEAD, branch honesto) + seção additive no `answer` quando l0_db/repos
+  presentes; re-index continua manual
+- ~~[P1] Config-map derivado~~ — `propose-config-map` (extrator determinístico
+  de values: application/bootstrap/.env → hostname → logical_repo, evidência
+  file:line, ambíguo = gap) + `emit-config-map-template` via
+  `unmapped_config_keys`
+- ~~[AGENT] explorer-indexer~~ — `agents/explorer-indexer.md` no padrão fino:
+  allow-list, ritual Fase 0-5, Gate em cada aceitação
+- ~~[P0] PK `(system_namespace, edge_id)` + migração~~ — schema v3 com rebuild
+  lossless (PK antiga garantia ausência de duplicatas, cópia não colide);
+  mitigação `edge_id_conflicts` removida por obsoleta
+- ~~[P0] Restitch não duplica~~ — `replaceSystemEdges` com wipe **por escopo
+  do run** (from E to nos repos do run) em transação única + `removed/inserted`
+  no report; `--pair` parcial preserva edges de repos fora do escopo
 - ~~Extrator Go/huma no L1~~ — `go-huma.mjs` em `src/adapters/`, registrado e
   documentado; `route-manifest-yaml` resolveu a classificação do `demo.yaml`
 - ~~Schemas do L0 self-contidos~~ — migrados para

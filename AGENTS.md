@@ -35,7 +35,7 @@ Agents:
 | Agent | Status | Nota |
 |---|---|---|
 | `agents/brainstorm.md` | ✅ | explorer-query + grilling. Handoff só com frontier vazia |
-| `agents/explorer-indexer.md` | 🔜 | Ritual L0 → L1 → L2. Bloqueado até P0/P1 do ROADMAP fecharem |
+| `agents/explorer-indexer.md` | ✅ | Ritual L0 → Gate → L1 (config-map proposto) → freshness; L2 sob demanda |
 | arquiteto, planner, orchestrator, coder, reviewer, tester | futuro | Mesmo padrão fino quando entrarem |
 
 Skills próprias (instaladas via `packages/explorer-skills`):
@@ -43,9 +43,9 @@ Skills próprias (instaladas via `packages/explorer-skills`):
 | Skill | Status | Papel |
 |---|---|---|
 | `explorer-l0` | ✅ auto-contida | Indexa 1 repo → baseline em SQLite (Human Gate) |
-| `explorer-l1` | ⚠️ gaps P0 | Stitch cross-service (PK de edge + wipe do restitch pendentes) |
+| `explorer-l1` | ✅ | Stitch cross-service. PK v3 + restitch atômico + config-map derivado (llm-assisted: ROADMAP) |
 | `explorer-l2` | ✅ | Journeys bottom-up (L1 → L0 → read_plan) |
-| `explorer-query` | ⚠️ gap P1 | Consulta. Falta aviso de stale |
+| `explorer-query` | ✅ | Consulta com freshness (avisa baseline stale vs HEAD) |
 | `architecture-canvas`, `architecture-diagrams`, `db-setup` | ✅ | Complementares (diagrama interativo, docs de arquitetura, Postgres p/ agentes) |
 
 Skills de **terceiros** (superpowers etc.) não são versionadas aqui — ficam

@@ -25,6 +25,7 @@ import { listSystemEdges, openSystemStore } from "../explorer-l1/src/system-stor
 import { listJourneys, openJourneyStore, showJourney } from "../explorer-l2/src/journey-store.mjs";
 import { projectContextPack } from "./src/context-pack.mjs";
 import { runSliceGcCli } from "./src/slice-gc-cli.mjs";
+import { checkFreshness } from "./src/freshness.mjs";
 
 function parseArgs(argv) {
   /** @type {Record<string, string | boolean>} */
@@ -80,9 +81,10 @@ export async function main(argv) {
   try {
     const [cmd, ...rest] = argv;
     if (!cmd) {
-      throw new Error(
-        "usage: ensure | answer | generate-human | list-projections | slice | slice-show | slice-gc",
-      );
+        throw new Error(
+          "usage: ensure | answer | freshness | generate-human | list-projections | slice | slice-show | slice-gc",
+        );
+
     }
     const flags = parseArgs(rest);
 
@@ -131,6 +133,33 @@ export async function main(argv) {
             2,
           )}\n`,
         );
+        return 0;
+      }
+      case "freshness": {
+        const l0Db = req(flags, "db");
+        const namespace = req(flags, "namespace");
+        const reposRaw = req(flags, "repos");
+        const repoEntries = reposRaw.split(",").map((s) => {
+          const [logical_repo, repo_path] = s.split("=");
+          if (!logical_repo || !repo_path) {
+            throw new Error(`--repos must be logical_repo=/abs/path, got invalid entry: ${s}`);
+          }
+          return { logical_repo: logical_repo.trim(), repo_path: repo_path.trim() };
+        });
+        const freshness = checkFreshness({ l0DbPath: l0Db, namespace, repos: repoEntries });
+        if (typeof flags.output === "string") {
+          writeFileSync(flags.output, `${JSON.stringify(freshness, null, 2)}\n`);
+        }
+        process.stdout.write(`${JSON.stringify(freshness, null, 2)}\n`);
+        for (const f of freshness) {
+          const shortBase = (f.baseline_revision || "").slice(0, 8);
+          const shortHead = (f.head_revision || "").slice(0, 8);
+          const statusLine = f.fresh
+            ? "fresh"
+            : `(+${f.behind} commits) — reindex`;
+          const line = `baseline ${f.logical_repo}@${shortBase} · ${f.branch} ${shortHead} ${statusLine}`;
+          process.stdout.write(`${line}\n`);
+        }
         return 0;
       }
       case "answer": {
@@ -192,10 +221,40 @@ export async function main(argv) {
           edges,
           projections,
         });
-        if (typeof flags.output === "string") {
-          writeFileSync(flags.output, `${JSON.stringify(pack, null, 2)}\n`);
+
+        // freshness integration (additive only; zero regression when --l0-db/--repos/--namespace absent)
+        let freshnessSection;
+        if (
+          typeof flags["l0-db"] === "string" &&
+          typeof flags.repos === "string" &&
+          typeof flags.namespace === "string"
+        ) {
+          try {
+            const l0Db = flags["l0-db"];
+            const ns = flags.namespace;
+            const repoEntries = flags.repos.split(",").map((s) => {
+              const [log, p] = s.split("=");
+              if (!log || !p) throw new Error(`invalid --repos entry: ${s}`);
+              return { logical_repo: log.trim(), repo_path: p.trim() };
+            });
+            const fr = checkFreshness({ l0DbPath: l0Db, namespace: ns, repos: repoEntries });
+            const stale = fr.some((r) => !r.fresh);
+            freshnessSection = {
+              repos: fr,
+              warning: stale
+                ? "One or more accepted baselines are behind HEAD — reindex recommended"
+                : null,
+            };
+          } catch (e) {
+            freshnessSection = { error: sanitizeSliceErrorMessage(e) };
+          }
         }
-        process.stdout.write(`${JSON.stringify(pack, null, 2)}\n`);
+
+        const answerOutput = freshnessSection ? { ...pack, freshness: freshnessSection } : pack;
+        if (typeof flags.output === "string") {
+          writeFileSync(flags.output, `${JSON.stringify(answerOutput, null, 2)}\n`);
+        }
+        process.stdout.write(`${JSON.stringify(answerOutput, null, 2)}\n`);
         return 0;
       }
       case "generate-human": {

@@ -9,6 +9,10 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { resolveConfigMap, unmappedConfigKeys } from "./src/config-map.mjs";
+import {
+  buildConfigMapCandidate,
+  extractConfigMapCandidates,
+} from "./src/config-map-values.mjs";
 import { sanitizeErrorMessage } from "./src/errors.mjs";
 import { describeAdapters, inspectRepoFrontier } from "./src/frontier-extract.mjs";
 import { loadAcceptedBaselines, stitchL1 } from "./src/stitch.mjs";
@@ -54,7 +58,7 @@ export async function main(argv) {
   try {
     if (!argv.length) {
       throw new Error(
-        "usage: stitch | frontier-report | status | export-system | callers | callees",
+        "usage: stitch | frontier-report | status | export-system | callers | callees | propose-config-map | emit-config-map-template",
       );
     }
     const [cmd, ...rest] = argv;
@@ -301,6 +305,93 @@ export async function main(argv) {
         } finally {
           store.close();
         }
+        return 0;
+      }
+      case "propose-config-map": {
+        const systemNs = req(flags, "system-namespace");
+        const repoSpec = req(flags, "repos");
+        const repos = repoSpec.split(",").map((part) => {
+          const [logical_repo, repo_path] = part.split("=");
+          if (!logical_repo || !repo_path) {
+            throw new Error(
+              `--repos entries must be logical_repo=/abs/path (got ${part})`,
+            );
+          }
+          return { logical_repo, repo_path };
+        });
+        const derived = extractConfigMapCandidates(repos);
+        const payload = buildConfigMapCandidate(derived, systemNs);
+        const outPath =
+          typeof flags.out === "string" ? flags.out : "config-map-candidate.json";
+        writeFileSync(outPath, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
+        process.stdout.write(
+          `${JSON.stringify(
+            {
+              status: "ok",
+              system_namespace: systemNs,
+              derived_keys: Object.keys(payload.config_target_repo).length,
+              gaps: payload._gaps.length,
+              output: outPath,
+            },
+            null,
+            2,
+          )}\n`,
+        );
+        return 0;
+      }
+      case "emit-config-map-template": {
+        // Emits skeleton ONLY for frontier config_keys that values-extractor could not resolve.
+        // Requires --revision because we re-extract frontiers the same way frontier-report does
+        // (inspectRepoFrontier + extractFrontierFromGit under the hood).
+        const systemNs = req(flags, "system-namespace");
+        const repoSpec = req(flags, "repos");
+        const revision = req(flags, "revision");
+        const repos = repoSpec.split(",").map((part) => {
+          const [logical_repo, repo_path] = part.split("=");
+          if (!logical_repo || !repo_path) {
+            throw new Error(
+              `--repos entries must be logical_repo=/abs/path (got ${part})`,
+            );
+          }
+          return { logical_repo, repo_path };
+        });
+        // build frontiers using inspect (reuses the git extraction path)
+        const frontiers = {};
+        for (const r of repos) {
+          const rep = inspectRepoFrontier({
+            repoPath: r.repo_path,
+            revision,
+            namespace: "template",
+            logical_repo: r.logical_repo,
+          });
+          frontiers[r.logical_repo] = rep.facts;
+        }
+        const unmapped = unmappedConfigKeys(frontiers, {}); // empty map -> all seen keys
+        /** @type {Record<string, string>} */
+        const config_target_repo = {};
+        for (const u of unmapped) {
+          config_target_repo[u.config_key] = "";
+        }
+        const _comment =
+          `Config-map template for "${systemNs}". Pre-filled with config keys seen in frontiers ` +
+          `but not resolved by propose-config-map values extractor. Fill values manually, then ` +
+          `move to config/${systemNs}.config-map.json.`;
+        const payload = {
+          _comment,
+          config_target_repo,
+          _provenance: {},
+          _gaps: [],
+        };
+        const outPath =
+          typeof flags.out === "string" ? flags.out : "config-map-template.json";
+        writeFileSync(outPath, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
+        process.stdout.write(
+          `${JSON.stringify(
+            { status: "ok", system_namespace: systemNs, template_keys: unmapped.length, output: outPath },
+            null,
+            2,
+          )}\n`,
+        );
         return 0;
       }
       default:

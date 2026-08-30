@@ -13,7 +13,7 @@ import { extractFrontierFromGit } from "./frontier-extract.mjs";
 import { matchFrontiers } from "./matcher.mjs";
 import {
   openSystemStore,
-  persistSystemEdges,
+  replaceSystemEdges,
   systemStats,
 } from "./system-store.mjs";
 
@@ -265,10 +265,14 @@ export function stitchL1(input) {
 
   const store = openSystemStore(systemDb);
   try {
-    const { inserted, skipped, conflicts } = persistSystemEdges(
+    // Restitch replaces the run's scope instead of accumulating: edges whose
+    // from AND to repos are both in this run are wiped and re-inserted in one
+    // transaction. Edges involving repos outside the run survive.
+    const { removed, inserted, skipped } = replaceSystemEdges(
       store,
       input.system_namespace,
       edges,
+      input.repos.map((r) => r.logical_repo),
     );
     const runId = `stitch:${createHash("sha256")
       .update(
@@ -300,15 +304,9 @@ export function stitchL1(input) {
       system_namespace: input.system_namespace,
       run_id: runId,
       edge_count: edges.length,
+      removed,
       inserted,
       skipped,
-      ...(conflicts && conflicts.length
-        ? {
-            edge_id_conflicts: conflicts,
-            warning:
-              "edges dropped because another system namespace already owns the same edge_id (PRIMARY KEY does not include system_namespace)",
-          }
-        : {}),
       stats,
       edges,
       frontier_summary,

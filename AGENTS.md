@@ -34,8 +34,9 @@ Agents:
 
 | Agent | Status | Nota |
 |---|---|---|
-| `agents/brainstorm.md` | ✅ | explorer-query + grilling. Handoff só com frontier vazia |
-| `agents/explorer-indexer.md` | ✅ | Ritual L0 → Gate → L1 (config-map proposto) → freshness; L2 sob demanda |
+| `agents/opencode/brainstorm.md` | ✅ | explorer-query + grilling. Handoff só com frontier vazia |
+| `agents/opencode/explorer-indexer.md` | ✅ | Ritual L0 → Gate → L1 (config-map proposto) → freshness; L2 sob demanda |
+| `agents/opencode/roles/explorer-worker|matcher|synth` | ✅ | Tiers de execução do indexer — binding de modelo é local |
 | arquiteto, planner, orchestrator, coder, reviewer, tester | futuro | Mesmo padrão fino quando entrarem |
 
 Skills próprias (instaladas via `packages/explorer-skills`):

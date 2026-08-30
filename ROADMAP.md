@@ -195,7 +195,7 @@ skill de terceiros só na allow-list da peça.
   de values: application/bootstrap/.env → hostname → logical_repo, evidência
   file:line, ambíguo = gap) + `emit-config-map-template` via
   `unmapped_config_keys`
-- ~~[AGENT] explorer-indexer~~ — `agents/explorer-indexer.md` no padrão fino:
+- ~~[AGENT] explorer-indexer~~ — `agents/opencode/explorer-indexer.md` no padrão fino:
   allow-list, ritual Fase 0-5, Gate em cada aceitação
 - ~~[P0] PK `(system_namespace, edge_id)` + migração~~ — schema v3 com rebuild
   lossless (PK antiga garantia ausência de duplicatas, cópia não colide);

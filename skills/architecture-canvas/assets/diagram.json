@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "title": "Architecture Canvas",
+  "groups": [
+    {
+      "id": "group-core",
+      "title": "Core platform",
+      "x": 80,
+      "y": 90,
+      "w": 520,
+      "h": 300,
+      "details": {
+        "description": "Serviços internos que participam do fluxo principal."
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "api",
+      "type": "service",
+      "title": "API Gateway",
+      "subtitle": "HTTP entrypoint",
+      "x": 130,
+      "y": 160,
+      "w": 180,
+      "h": 64,
+      "groupId": "group-core",
+      "details": {
+        "description": "Recebe chamadas do cliente e encaminha para o domínio.",
+        "evidence": "GET /v1/debits",
+        "input": "{\n  \"plate\": \"ABC1234\"\n}"
+      }
+    },
+    {
+      "id": "orchestrator",
+      "type": "service",
+      "title": "Orchestrator",
+      "subtitle": "business flow",
+      "x": 360,
+      "y": 160,
+      "w": 180,
+      "h": 64,
+      "groupId": "group-core",
+      "details": {
+        "description": "Coordena o fluxo entre providers e persistência.",
+        "evidence": "Orchestrator.fetchDebits"
+      }
+    },
+    {
+      "id": "debits-db",
+      "type": "database",
+      "title": "Debits DB",
+      "subtitle": "IPVA · Ticket",
+      "x": 360,
+      "y": 285,
+      "w": 180,
+      "h": 64,
+      "groupId": "group-core",
+      "details": {
+        "description": "Dados persistidos pelo fluxo.",
+        "entity": "{\n  \"external_id\": \"String\",\n  \"value\": \"BigDecimal\",\n  \"status\": \"DebitStatus\"\n}"
+      }
+    },
+    {
+      "id": "bank",
+      "type": "external",
+      "title": "Bank Provider",
+      "subtitle": "external HTTP",
+      "x": 740,
+      "y": 160,
+      "w": 180,
+      "h": 64,
+      "groupId": null,
+      "details": {
+        "description": "Dependência externa."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-api-orchestrator",
+      "from": "api",
+      "to": "orchestrator",
+      "label": "dispatches",
+      "status": "bound",
+      "badge": {
+        "label": "1",
+        "offsetX": 0,
+        "offsetY": -16
+      },
+      "details": {
+        "description": "Chamada interna confirmada.",
+        "evidence": "ApiController → Orchestrator"
+      }
+    },
+    {
+      "id": "edge-orchestrator-bank",
+      "from": "orchestrator",
+      "to": "bank",
+      "label": "fetches",
+      "status": "gap",
+      "badge": {
+        "label": "2",
+        "offsetX": 0,
+        "offsetY": -16
+      },
+      "details": {
+        "description": "Integração externa a validar no L1."
+      }
+    },
+    {
+      "id": "edge-orchestrator-db",
+      "from": "orchestrator",
+      "to": "debits-db",
+      "label": "persists",
+      "status": "data",
+      "badge": {
+        "label": "3",
+        "offsetX": 16,
+        "offsetY": 0
+      },
+      "details": {
+        "description": "Persistência de débitos normalizados."
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "_comment": "Config map de exemplo (sintético) do sistema demo. Cada chave é a env de base-URL usada pelo chamador; o valor é o logical_repo que atende.",
+  "config_target_repo": {
+    "IAM_API_URL": "cloud",
+    "PAYMENT_SERVICE_URL": "cloud",
+    "AGENT_SERVICE_URL": "cloud",
+    "OPERATOR_API_URL": "cloud",
+    "RELEASE_SERVICE_URL": "cloud"
+  }
+}

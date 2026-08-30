@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-coding-celestion.local/skills/explorer-l0/contracts/graph-index.schema.json",
+  "title": "Descobrir v1 GraphIndex",
+  "description": "Canonical index of Knowledge Record and Relation IDs produced by one Descobrir load. Lists are sorted lexicographically for deterministic comparison. canonical_graph_hash is SHA-256 over the canonicalized complete structured Records and Relations of the load (including evidence and status; excluding narrative/observational metadata such as free-form prose outside the structural contract, timestamps, run ids, and generated_at). Manifest id and raw artifact content hashes MUST NOT substitute for graph content in this hash. Repeatability compares canonical_graph_hash for identical Native Artifact bytes + source_revision. engine and artifact_manifest_id are load linkage metadata, not substitutes for the graph hash payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "namespace",
+    "source_revision",
+    "artifact_manifest_id",
+    "engine",
+    "record_ids",
+    "relation_ids",
+    "counts",
+    "canonical_graph_hash"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Identifier of this graph index document for the load. Not an input to canonical_graph_hash."
+    },
+    "namespace": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Knowledge Namespace of the owning project. All listed record and relation IDs are unique within this namespace."
+    },
+    "source_revision": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Pinned logical VCS revision that anchors the indexed load. Repeatability input context (with identical Native Artifact bytes)."
+    },
+    "artifact_manifest_id": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Content-addressed Artifact Manifest id for this load (see artifact-manifest.schema.json). Load linkage only — MUST NOT substitute for graph content in canonical_graph_hash."
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "profile"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Discovery Engine name as a generic non-empty string. Load linkage metadata."
+        },
+        "profile": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Engine profile as a generic non-empty string. Load linkage metadata."
+        }
+      },
+      "description": "Engine identity for the load. Not a substitute for canonical_graph_hash content. Re-running the Discovery Engine is not part of the v1 repeatability gate."
+    },
+    "record_ids": {
+      "type": "array",
+      "description": "Canonical Knowledge Record IDs, sorted lexicographically ascending. Sort order is part of the contract. Navigation aid; the hash covers full structured records, not only IDs.",
+      "items": {
+        "$ref": "#/$defs/canonicalRecordId"
+      }
+    },
+    "relation_ids": {
+      "type": "array",
+      "description": "Canonical Relation IDs (type-prefixed), sorted lexicographically ascending. Sort order is part of the contract. Navigation aid; the hash covers full structured relations, not only IDs.",
+      "items": {
+        "$ref": "#/$defs/canonicalRelationId"
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records", "relations"],
+      "properties": {
+        "records": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Must equal record_ids.length."
+        },
+        "relations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Must equal relation_ids.length."
+        }
+      }
+    },
+    "canonical_graph_hash": {
+      "$ref": "#/$defs/sha256",
+      "description": "SHA-256 over the canonical projection of the complete structured set of Knowledge Records and Relations for this load. INCLUDED for records: id, namespace, type, name, attributes, status, source_revision, source_engine and full evidence. INCLUDED for relations: id, namespace, from_record, relation_type, to_record, status, source_revision, source_engine and full evidence. EXCLUDED: the record summary (narrative projection), CoverageReport timestamps, GraphIndex.metadata, free-form logs, wall-clock fields, producer_run_id, generated_at and any field marked metadata-only. Objects use stable key ordering and set-like arrays use deterministic ordering defined by the adapter profile. MUST NOT be computed from manifest id alone or from raw Native Artifact content hashes alone — those do not substitute for graph content. Repeatability.result compares this hash across two Adapter index runs on identical Native Artifact bytes + source_revision."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "generated_at": {
+          "type": "string",
+          "minLength": 1,
+          "description": "RFC 3339 timestamp of index generation. Metadata only; MUST NOT enter canonical_graph_hash."
+        },
+        "producer_run_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Optional run correlation id. Metadata only; MUST NOT enter canonical_graph_hash."
+        }
+      },
+      "description": "Observational metadata excluded from canonical_graph_hash semantics."
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonicalRecordId": {
+      "type": "string",
+      "minLength": 3,
+      "pattern": "^[^:\\s]+:.+$",
+      "description": "Type-prefixed Canonical ID: <type>:<normalized-natural-key>."
+    },
+    "canonicalRelationId": {
+      "type": "string",
+      "minLength": 3,
+      "pattern": "^[^:\\s]+:.+$",
+      "description": "Type-prefixed Canonical Relation ID derived from relation_type + from_record + to_record."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex-encoded SHA-256 digest."
+    }
+  }
+}

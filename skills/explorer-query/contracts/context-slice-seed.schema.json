@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-dev-harness.local/skills/explorer-query/contracts/context-slice-seed.schema.json",
+  "title": "Context Slice Engine v2 — Seed",
+  "description": "Standalone contract for a single Context Slice seed. A seed is a stable anchor that bootstraps materialization: an L0 fact anchor (record/relation in an accepted baseline), an L1 cross-repo edge, or an L2 journey binding. Three closed shapes via oneOf; bind_id is OPTIONAL only on l2_journey. All shapes reject additionalProperties.",
+  "$ref": "#/$defs/seed",
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex-encoded SHA-256 digest (64 chars)."
+    },
+    "canonicalId": {
+      "type": "string",
+      "minLength": 3,
+      "pattern": "^[^:\\s]+:.+$",
+      "description": "Type-prefixed Canonical ID, same shape as relation.schema.json canonicalRecordId."
+    },
+    "seed": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/l0FactSeed"
+        },
+        {
+          "$ref": "#/$defs/l1EdgeSeed"
+        },
+        {
+          "$ref": "#/$defs/l2JourneySeed"
+        }
+      ],
+      "description": "Discriminated by the 'kind' field. Closed enum: l0_fact | l1_edge | l2_journey."
+    },
+    "l0FactSeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "namespace",
+        "logical_repo",
+        "candidate_id",
+        "source_revision",
+        "record_id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "l0_fact"
+        },
+        "namespace": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "logical_repo": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "candidate_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Accepted L0 baseline candidate id."
+        },
+        "source_revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "record_id": {
+          "$ref": "#/$defs/canonicalId",
+          "description": "Canonical ID of the Knowledge Record this seed anchors to."
+        },
+        "relation_id": {
+          "$ref": "#/$defs/canonicalId",
+          "description": "Optional Relation anchor within the same baseline."
+        }
+      }
+    },
+    "l1EdgeSeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "system_namespace", "edge_id", "edge_set_hash"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "l1_edge"
+        },
+        "system_namespace": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "L1 system namespace (cross-repo)."
+        },
+        "edge_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "L1 edge identifier from system_edges."
+        },
+        "edge_set_hash": {
+          "$ref": "#/$defs/sha256",
+          "description": "sha256 of the accepted L1 edge set used."
+        }
+      }
+    },
+    "l2JourneySeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "journey_id", "journey_hash"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "l2_journey"
+        },
+        "journey_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "JourneySpec journey identifier."
+        },
+        "journey_hash": {
+          "$ref": "#/$defs/sha256",
+          "description": "sha256 of the JourneySpec."
+        },
+        "bind_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "OPTIONAL resolved bind identifier. Producers MAY omit when binding has not been resolved."
+        }
+      }
+    }
+  }
+}

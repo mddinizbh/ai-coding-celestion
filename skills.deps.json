@@ -1,0 +1,27 @@
+{
+  "$comment": "Skills de terceiros complementares. O installer baixa (git clone --depth 1), copia as skills listadas para ~/.agents/skills/ e marca ownership. Skills próprias NÃO entram aqui — vivem versionadas em skills/.",
+  "version": 1,
+  "sources": [
+    {
+      "name": "superpowers",
+      "repo": "https://github.com/obra/superpowers",
+      "ref": "main",
+      "skills": [
+        "brainstorming",
+        "dispatching-parallel-agents",
+        "executing-plans",
+        "finishing-a-development-branch",
+        "receiving-code-review",
+        "requesting-code-review",
+        "subagent-driven-development",
+        "systematic-debugging",
+        "test-driven-development",
+        "using-git-worktrees",
+        "using-superpowers",
+        "verification-before-completion",
+        "writing-plans",
+        "writing-skills"
+      ]
+    }
+  ]
+}

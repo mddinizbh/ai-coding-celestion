@@ -1,0 +1,402 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-coding-celestion.local/skills/explorer-l0/contracts/coverage-report.schema.json",
+  "title": "Descobrir v1 CoverageReport",
+  "description": "Machine-readable coverage and gate report for one Descobrir load (baseline candidate). Captures schema validation, Provenance Coverage (artifact_reference_percentage + repository_verified_percentage), unresolved IDs, status histogram, repeatability via canonical_graph_hash, freshness, producer_baseline (with result pass|fail), mutation pre/post equivalence, threshold (required booleans), and overall passed. passed is the implementation invariant: schema_result.valid AND threshold.require_schema_valid implication, repeatability.result==pass when require_repeatability_pass, mutation.equivalent when require_mutation_equivalent, producer_baseline.result==pass when require_producer_reconciliation_pass, AND provenance.repository_verified_percentage >= threshold.minimum_repository_verified_percentage. Timestamps are metadata only and MUST NOT participate in canonical_graph_hash. Graph-to-previous-baseline deltas are out of scope for this report v1. Must not embed secrets, env values, connection strings, raw code payloads, absolute paths, or dirty-file contents.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "namespace",
+    "source_revision",
+    "artifact_manifest_id",
+    "graph_index_id",
+    "schema_result",
+    "provenance",
+    "unresolved_ids",
+    "status_counts",
+    "repeatability",
+    "freshness",
+    "producer_baseline",
+    "mutation",
+    "threshold",
+    "passed"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Identifier of this coverage report document."
+    },
+    "namespace": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Knowledge Namespace of the owning project."
+    },
+    "source_revision": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Pinned logical VCS revision that anchors the reported load."
+    },
+    "artifact_manifest_id": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Content-addressed Artifact Manifest id for the load under report (see artifact-manifest.schema.json id semantics)."
+    },
+    "graph_index_id": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Graph Index ID whose canonical_graph_hash and ID lists this report evaluates."
+    },
+    "schema_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["valid", "errors"],
+      "properties": {
+        "valid": {
+          "type": "boolean",
+          "description": "True when all emitted records, relations, manifest, and graph index satisfy their Descobrir v1 schemas."
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "message"],
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/nonEmptyString",
+                "description": "JSON Pointer or logical path to the failing location."
+              },
+              "message": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "schema_id": {
+                "$ref": "#/$defs/nonEmptyString",
+                "description": "Optional schema $id that rejected the instance."
+              }
+            }
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_entities",
+        "artifact_reference_count",
+        "artifact_reference_percentage",
+        "repository_verified_count",
+        "repository_verified_percentage"
+      ],
+      "properties": {
+        "total_entities": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total Knowledge Records + Relations in the load (denominator for both rates)."
+        },
+        "total_records": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional breakdown: Knowledge Record count."
+        },
+        "total_relations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional breakdown: Relation count."
+        },
+        "artifact_reference_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Entities (records + relations) with a valid Artifact Reference: manifest_id present, artifact_path resolvable in the manifest, content_sha256 matching, range well-formed."
+        },
+        "artifact_reference_percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Provenance Coverage rate 1: 100 * artifact_reference_count / total_entities, or 0 when total_entities is 0. Valid artifact provenance only."
+        },
+        "repository_verified_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Entities (records + relations) with Repository Reference verified against pinned source_revision AND status comprovado. Each entity must carry its own verified repository evidence."
+        },
+        "repository_verified_percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Provenance Coverage rate 2: 100 * repository_verified_count / total_entities, or 0 when total_entities is 0. Artifact-only entities stay hipótese and do not count here."
+        },
+        "artifact_only_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional count of entities whose evidence is artifact-only (cannot be comprovado)."
+        }
+      },
+      "description": "Provenance Coverage metric set (single definition): artifact_reference_percentage + repository_verified_percentage. Sampling audits do not promote entities to comprovado."
+    },
+    "unresolved_ids": {
+      "type": "array",
+      "description": "Canonical IDs (records and/or relations) with unresolvable repository references or missing natural-key material.",
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    },
+    "status_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comprovado",
+        "hipótese",
+        "contradição",
+        "stale"
+      ],
+      "properties": {
+        "comprovado": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hipótese": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "contradição": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of entities with status contradição (status enum value, never a separate flag)."
+        },
+        "stale": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of entities with status stale. v1 may be zero; stale is for later freshness consumers."
+        }
+      },
+      "description": "Histogram of status values across Knowledge Records and Relations for the load."
+    },
+    "repeatability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result", "canonical_graph_hash"],
+      "properties": {
+        "result": {
+          "type": "string",
+          "enum": ["pass", "fail"],
+          "description": "pass when two Adapter index runs on identical Native Artifact bytes + source_revision produce the same canonical_graph_hash."
+        },
+        "canonical_graph_hash": {
+          "$ref": "#/$defs/sha256",
+          "description": "canonical_graph_hash under comparison (MUST equal GraphIndex.canonical_graph_hash for the run). Covers canonicalized complete structured Records/Relations including evidence and status; excludes narrative/observational metadata. Manifest id and raw artifact hashes are not substitutes."
+        },
+        "baseline_hash": {
+          "$ref": "#/$defs/sha256",
+          "description": "Optional second-run canonical_graph_hash used only for same-input repeatability comparison (not a previous published graph baseline)."
+        },
+        "details": {
+          "type": "string",
+          "description": "Optional human-readable explanation of structural divergence. Must not be required for machine gating. Must not embed secrets or raw payloads."
+        }
+      },
+      "description": "Repeatability of the Artifact Adapter index for identical Native Artifact bytes + source_revision. Compares canonical_graph_hash. Re-running the Discovery Engine is not part of this v1 gate."
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_revision"],
+      "properties": {
+        "source_revision": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Revision at which facts were observed. v1 records source_revision; no incremental updater in this flow."
+        },
+        "observed_at": {
+          "type": "string",
+          "minLength": 1,
+          "description": "RFC 3339 observation timestamp. Metadata only; excluded from canonical_graph_hash."
+        },
+        "stale_record_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "description": "Record/relation IDs already marked stale relative to a newer known head, when available. Consumed by later freshness checks."
+        }
+      }
+    },
+    "producer_baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared_counts", "indexed_counts", "deltas", "result"],
+      "description": "Compares arbitrary producer-declared metrics against arbitrary indexed metrics from this load. Not a previous graph baseline. Graph-to-previous-baseline deltas are out of scope for coverage-report v1.",
+      "properties": {
+        "declared_counts": {
+          "$ref": "#/$defs/metricCountMap",
+          "description": "Producer-declared metric counts keyed by metric name. Values are non-negative integers. Metric names are profile-defined generic strings."
+        },
+        "indexed_counts": {
+          "$ref": "#/$defs/metricCountMap",
+          "description": "Indexed metric counts for the same metric name space after adaptation. Values are non-negative integers."
+        },
+        "deltas": {
+          "type": "array",
+          "description": "Per-metric comparison rows. Every delta object requires a non-empty explanation. delta is indexed - declared and MAY be negative when the index under-counts the producer declaration.",
+          "items": {
+            "$ref": "#/$defs/metricDelta"
+          }
+        },
+        "result": {
+          "type": "string",
+          "enum": ["pass", "fail"],
+          "description": "pass when every delta has a non-empty explanation and producer reconciliation policy for the load is satisfied; fail otherwise. Feeds threshold.require_producer_reconciliation_pass and overall passed."
+        }
+      }
+    },
+    "mutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pre", "post", "equivalent"],
+      "properties": {
+        "pre": {
+          "$ref": "#/$defs/mutationSnapshot",
+          "description": "Target repository / workspace snapshot before the load."
+        },
+        "post": {
+          "$ref": "#/$defs/mutationSnapshot",
+          "description": "Target repository / workspace snapshot after the load."
+        },
+        "equivalent": {
+          "type": "boolean",
+          "description": "True when pre and post are equivalent for all surfaces the load must not mutate (target repo tracked tree outside harness output). Required true for passed when threshold.require_mutation_equivalent is true."
+        }
+      },
+      "description": "Pre/post equivalence evidence that the load did not mutate the target repository. Dirty path names/counts only — never dirty-file contents."
+    },
+    "threshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_repository_verified_percentage",
+        "require_schema_valid",
+        "require_repeatability_pass",
+        "require_mutation_equivalent",
+        "require_producer_reconciliation_pass"
+      ],
+      "properties": {
+        "minimum_repository_verified_percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Minimum provenance.repository_verified_percentage required for passed."
+        },
+        "require_schema_valid": {
+          "type": "boolean",
+          "description": "When true, schema_result.valid must be true for passed."
+        },
+        "require_repeatability_pass": {
+          "type": "boolean",
+          "description": "When true, repeatability.result must be pass for passed."
+        },
+        "require_mutation_equivalent": {
+          "type": "boolean",
+          "description": "When true, mutation.equivalent must be true for passed."
+        },
+        "require_producer_reconciliation_pass": {
+          "type": "boolean",
+          "description": "When true, producer_baseline.result must be pass for passed."
+        }
+      },
+      "description": "Gate threshold. All five fields are required. passed is the implementation invariant combining these booleans with repository_verified_percentage."
+    },
+    "passed": {
+      "type": "boolean",
+      "description": "Implementation invariant (not an independent free boolean). MUST equal the conjunction of: (NOT threshold.require_schema_valid OR schema_result.valid) AND (NOT threshold.require_repeatability_pass OR repeatability.result == pass) AND (NOT threshold.require_mutation_equivalent OR mutation.equivalent) AND (NOT threshold.require_producer_reconciliation_pass OR producer_baseline.result == pass) AND (provenance.repository_verified_percentage >= threshold.minimum_repository_verified_percentage). Producer deltas without non-empty explanation force producer_baseline.result=fail and thus can force passed=false."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "generated_at": {
+          "type": "string",
+          "minLength": 1,
+          "description": "RFC 3339 report generation timestamp. Metadata only; MUST NOT enter canonical_graph_hash."
+        },
+        "producer_run_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Optional run correlation id. Metadata only."
+        }
+      },
+      "description": "Observational metadata excluded from canonical_graph_hash semantics. Must not embed secrets or raw payloads."
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex-encoded SHA-256 digest."
+    },
+    "metricCountMap": {
+      "type": "object",
+      "description": "Map of metric name → non-negative integer count. Keys are non-empty strings; no fixed metric vocabulary in this generic contract.",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "metricDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "declared", "indexed", "delta", "explanation"],
+      "properties": {
+        "metric": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Metric name matching a key in declared_counts and/or indexed_counts."
+        },
+        "declared": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Producer-declared count for this metric."
+        },
+        "indexed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Indexed count for this metric after adaptation."
+        },
+        "delta": {
+          "type": "integer",
+          "description": "indexed - declared. Negative when the index under-counts the producer declaration; positive when it over-counts."
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required non-empty machine-oriented note on why the delta exists (including when delta is 0 — e.g. \"exact match\")."
+        }
+      }
+    },
+    "mutationSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary_hash"],
+      "properties": {
+        "summary_hash": {
+          "$ref": "#/$defs/sha256",
+          "description": "Hash of the canonical mutation-relevant snapshot (tracked paths, object counts, dirty-path names without content values). Never includes dirty-file contents, secrets, or absolute machine paths as identity."
+        },
+        "tracked_file_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dirty_path_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of dirty paths observed; values of dirty contents MUST NOT be copied into the report."
+        },
+        "anchor_object_present": {
+          "type": "boolean",
+          "description": "Whether the pinned source_revision object was resolvable at snapshot time."
+        }
+      }
+    }
+  }
+}

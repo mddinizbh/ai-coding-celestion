@@ -1,0 +1,42 @@
+{
+  "name": "opencode-explorer",
+  "version": "0.1.0",
+  "description": "Install Explorer L0–L2 + query skills for OpenCode (Project Knowledge Graph)",
+  "type": "module",
+  "bin": {
+    "opencode-explorer": "bin/opencode-explorer.js",
+    "explorer-skills": "bin/opencode-explorer.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skills",
+    "README.md"
+  ],
+  "scripts": {
+    "sync-skills": "node ./scripts/sync-skills.mjs",
+    "prepack": "node ./scripts/sync-skills.mjs",
+    "test": "node --test ./test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "opencode",
+    "explorer",
+    "knowledge-graph",
+    "descobrir",
+    "skills"
+  ],
+  "license": "MIT",
+  "author": "Marley Diniz",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mddinizbh/ai-dev-harness.git",
+    "directory": "packages/explorer-skills"
+  },
+  "bugs": {
+    "url": "https://github.com/mddinizbh/ai-dev-harness/issues"
+  },
+  "homepage": "https://github.com/mddinizbh/ai-dev-harness/tree/master/packages/explorer-skills#readme"
+}

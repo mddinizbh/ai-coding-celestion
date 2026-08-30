@@ -1,0 +1,15 @@
+# Ponteiro do brainstorm → arquiteto.
+# O miolo está no markdown (visao). Este yaml não carrega requisito nem spec.
+
+status: # complete
+created: # YYYY-MM-DD
+agent: brainstorm
+next: arquiteto
+session: # slug kebab-case
+
+# Documento que o arquiteto lê
+visao: # .claude/handoff/<session>/visao.md
+
+code_references:
+  - path: # src/...
+    why: # uma linha

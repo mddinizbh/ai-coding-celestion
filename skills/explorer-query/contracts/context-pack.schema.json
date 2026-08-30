@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-dev-harness.local/skills/explorer-query/contracts/context-pack.schema.json",
+  "title": "Context Slice Engine v2 — Pack",
+  "description": "Canonical payload for a budgeted Context Pack: the agent-facing projection derived from a complete Context Slice. Token/node/edge budgets apply HERE, never at the Slice layer (Locked decision #6). pack_id is content-addressed: 'pack:' + sha256 over this canonical payload. seeds is ALWAYS present (mandatory). generated_at, durations, and any clock field live ONLY in a non-hashed CLI envelope property, never inside the canonical Pack payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pack_id",
+    "slice_hash",
+    "derivation_summary",
+    "seeds",
+    "budget",
+    "coverage_summary",
+    "truncated"
+  ],
+  "properties": {
+    "pack_id": {
+      "$ref": "#/$defs/packId",
+      "description": "Stable identifier: 'pack:' + sha256 of the canonical Pack payload."
+    },
+    "slice_hash": {
+      "$ref": "#/$defs/sha256",
+      "description": "slice_hash of the source Slice this Pack was derived from."
+    },
+    "derivation_summary": {
+      "$ref": "#/$defs/derivationSummary",
+      "description": "Subset of the source Slice's derivation key struct, sufficient to reproduce the Slice."
+    },
+    "seeds": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Normalized seeds carried over from the source Slice. Always present, even after truncation.",
+      "items": {
+        "$ref": "#/$defs/seed"
+      }
+    },
+    "budget": {
+      "$ref": "#/$defs/budget",
+      "description": "Token/node/edge budget requested by the caller and consumed by the projection."
+    },
+    "coverage_summary": {
+      "$ref": "#/$defs/coverageSummary",
+      "description": "Counts of nodes, edges, and misses carried into the Pack."
+    },
+    "truncated": {
+      "type": "boolean",
+      "description": "true when the projection hit a budget boundary and dropped nodes/edges beyond it."
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex-encoded SHA-256 digest (64 chars)."
+    },
+    "packId": {
+      "type": "string",
+      "pattern": "^pack:[a-f0-9]{64}$",
+      "description": "Stable Pack identifier: literal prefix 'pack:' + sha256 of the canonical Pack payload."
+    },
+    "canonicalId": {
+      "type": "string",
+      "minLength": 3,
+      "pattern": "^[^:\\s]+:.+$",
+      "description": "Type-prefixed Canonical ID, same shape as relation.schema.json canonicalRecordId."
+    },
+    "policyName": {
+      "type": "string",
+      "enum": ["journey", "impact", "drill-down"],
+      "description": "Closed policy enum, mirrors context-slice.schema.json policyName."
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "options_hash"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/policyName"
+        },
+        "version": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "options_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "derivationSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "derivation_key",
+        "engine_version",
+        "slice_schema_version",
+        "system_namespace",
+        "policy"
+      ],
+      "properties": {
+        "derivation_key": {
+          "$ref": "#/$defs/sha256",
+          "description": "sha256 of the source Slice's full derivation key struct."
+        },
+        "engine_version": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "slice_schema_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Integer schema version (ADR 0009), consistent with context-slice.schema.json and buildDerivationInputs()."
+        },
+        "system_namespace": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "policy": {
+          "$ref": "#/$defs/policy"
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "used"],
+      "properties": {
+        "requested": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Budget the caller requested for this Pack."
+        },
+        "used": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Budget consumed by the projection. used <= requested is a producer invariant."
+        }
+      }
+    },
+    "coverageSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "edges", "misses"],
+      "properties": {
+        "nodes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "edges": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "misses": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "seed": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/l0FactSeed"
+        },
+        {
+          "$ref": "#/$defs/l1EdgeSeed"
+        },
+        {
+          "$ref": "#/$defs/l2JourneySeed"
+        }
+      ],
+      "description": "Discriminated by 'kind'. Closed enum: l0_fact | l1_edge | l2_journey."
+    },
+    "l0FactSeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "namespace",
+        "logical_repo",
+        "candidate_id",
+        "source_revision",
+        "record_id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "l0_fact"
+        },
+        "namespace": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "logical_repo": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "candidate_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "source_revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "record_id": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "relation_id": {
+          "$ref": "#/$defs/canonicalId"
+        }
+      }
+    },
+    "l1EdgeSeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "system_namespace", "edge_id", "edge_set_hash"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "l1_edge"
+        },
+        "system_namespace": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "edge_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "edge_set_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "l2JourneySeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "journey_id", "journey_hash"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "l2_journey"
+        },
+        "journey_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "journey_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bind_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    }
+  }
+}

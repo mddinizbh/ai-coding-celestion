@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "pg-reader": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "CONNECTION_STRING_AQUI"],
+      "_comment_reader": "MCP server de leitura via npx. Somente SELECT. Nao requer instalacao local."
+    },
+    "pg-writer": {
+      "command": "node",
+      "args": ["PATH_DO_MCP_SERVER/dist/index.js", "CONNECTION_STRING_AQUI"],
+      "_comment_writer": "MCP server de escrita instalado localmente. Permite INSERT, UPDATE, DELETE alem de SELECT. Path padrao: ~/.claude/mcp-server/dist/index.js"
+    }
+  },
+  "_instructions": [
+    "1. Substitua CONNECTION_STRING_AQUI pela connection string real do PostgreSQL",
+    "   Formato: postgresql://usuario:senha@host:porta/banco",
+    "   Exemplo: postgresql://admin:senha@localhost:5432/meudb",
+    "",
+    "2. Substitua PATH_DO_MCP_SERVER pelo path de instalacao do MCP writer server",
+    "   Path padrao apos instalacao: ~/.claude/mcp-server",
+    "",
+    "3. SEGURANCA: Este arquivo contem credenciais. Adicione ao .gitignore:",
+    "   echo '.mcp.json' >> .gitignore",
+    "",
+    "4. Apos editar, renomeie para .mcp.json na raiz do projeto",
+    "",
+    "5. Reinicie o Claude Code para carregar os MCP servers"
+  ]
+}

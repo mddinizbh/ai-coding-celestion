@@ -1,0 +1,57 @@
+# ai-coding-celestion
+
+Repo **template do time**: agents + skills para OpenCode. Qualquer membro
+clona, instala e usa. Dados de projeto (o `.sqlite` indexado) ficam na máquina
+de cada um — neste repo entra só a ferramenta.
+
+pt-BR. Sem nome de empresa no código.
+
+## Padrão
+
+1. Skill = método. Agent `.md` = classe. Invocação = `new` (cwd + este AGENTS.md + prompt).
+2. Um coder, muitos `new`. Não uma subclasse por projeto.
+3. Workflow = service burro. Orchestrator de código = só coder → reviewer → tester.
+4. Uma run = um use case. Sem Kafka, sem memória distribuída, sem 10 loaders na v1.
+5. Artefato do brainstorm = `contracts/brainstorm-visao.md` + ponteiro yaml. Não é PRD nem SDD.
+6. `code_references` = path + why. Sem colar corpo de arquivo.
+7. Skill de terceiros só na allow-list da peça. Não substitui o roster.
+
+## Convenções do grafo (explorer)
+
+- `namespace` = projeto · `logical_repo` = cada repositório. Decide-se uma vez; mudar nome fragmenta o grafo.
+- Grafo sempre da **master**. Baseline velho é declarado na consulta, nunca escondido.
+- Store: SQLite local (`~/.local/share/descobrir/<namespace>.sqlite`) — porta hexagonal; adapter compartilhado é futuro (ver ROADMAP).
+- Human Gate: baseline só vira "aceito" com aprovação humana. Consenso entre agentes não substitui.
+
+## Política de skill
+
+Skills de **escrita** (`explorer-l0/l1/l2`) só são chamadas por agent com
+allow-list explícito. `explorer-query` (leitura) é livre.
+
+## Roster
+
+Agents:
+
+| Agent | Status | Nota |
+|---|---|---|
+| `agents/brainstorm.md` | ✅ | explorer-query + grilling. Handoff só com frontier vazia |
+| `agents/explorer-indexer.md` | 🔜 | Ritual L0 → L1 → L2. Bloqueado até P0/P1 do ROADMAP fecharem |
+| arquiteto, planner, orchestrator, coder, reviewer, tester | futuro | Mesmo padrão fino quando entrarem |
+
+Skills próprias (instaladas via `packages/explorer-skills`):
+
+| Skill | Status | Papel |
+|---|---|---|
+| `explorer-l0` | ✅ auto-contida | Indexa 1 repo → baseline em SQLite (Human Gate) |
+| `explorer-l1` | ⚠️ gaps P0 | Stitch cross-service (PK de edge + wipe do restitch pendentes) |
+| `explorer-l2` | ✅ | Journeys bottom-up (L1 → L0 → read_plan) |
+| `explorer-query` | ⚠️ gap P1 | Consulta. Falta aviso de stale |
+| `architecture-canvas`, `architecture-diagrams`, `db-setup` | ✅ | Complementares (diagrama interativo, docs de arquitetura, Postgres p/ agentes) |
+
+Skills de **terceiros** (superpowers etc.) não são versionadas aqui — ficam
+declaradas em `skills.deps.json` e o installer baixa na instalação (modelo
+Maven). O `brainstorm` depende de `grilling`/`domain-modeling`, que ainda não
+têm fonte distribuída (ver ROADMAP).
+
+O que falta: `ROADMAP.md`. Contrato do L0: `docs/spec/explorer-l0-contract.md`.
+Vocabulário: `docs/domain/glossary.md`. Instalação: `README.md`.

@@ -1,0 +1,10 @@
+{
+  "_comment": "Config map do sistema acme. Cada chave é a env de base-URL usada pelo chamador; o valor é o logical_repo que atende. Mapear uma chave promove o edge de 0.55 (palpite por path) para 0.95 (evidência de configuração).",
+  "config_target_repo": {
+    "PROVIDERCONTROLLER_API_URL": "tax-provider-controller",
+    "TAX_PROVIDER_ALT_URL": "tax-provider-alt",
+    "TAX_PROVIDER_CONTROLLER_URL": "tax-provider-controller",
+    "TAX_BASE_URL": "acme-tax",
+    "TAX_PROVIDER_ALT_BASE_URL": "tax-provider-alt"
+  }
+}

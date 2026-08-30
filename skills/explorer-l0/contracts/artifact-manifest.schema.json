@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-coding-celestion.local/skills/explorer-l0/contracts/artifact-manifest.schema.json",
+  "title": "Descobrir v1 ArtifactManifest",
+  "description": "Versioned inventory of Native Artifacts for one Descobrir load. Native Artifacts are untrusted. Default v1 preservation is in-place: this manifest stores relative path, content hash, and metadata; raw artifact bytes remain in the target context and are NOT copied into harness output or baseline. Represents the current artifact set for this load — not a history of multiple engine runs. Paths are relative to the logical repository; absolute machine paths are forbidden. Engine name and profile are generic strings narrowed by Project Profiles. Manifest id is content-addressed from namespace + logical_repo + source_revision + engine/profile + sorted artifact content_sha256 values (never from acquisition_mode, timestamps, or run ids).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "namespace",
+    "logical_repo",
+    "source_revision",
+    "engine",
+    "adapter",
+    "acquisition_mode",
+    "artifacts",
+    "freshness"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Deterministic content-addressed manifest ID. Producers MUST derive it solely from: namespace, logical_repo, source_revision, engine.name, engine.profile, and the sorted list of artifact content_sha256 values (lexicographic ascending). Excluded from the derivation: acquisition_mode, observed_at, producer_run_id, freshness timestamps, adapter name, media_type, byte_length, and any wall-clock metadata. Same structural inputs MUST yield the same id."
+    },
+    "namespace": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Knowledge Namespace of the owning project. IDs and persistence are scoped to this namespace."
+    },
+    "logical_repo": {
+      "$ref": "#/$defs/logicalRepo",
+      "description": "Logical repository identity independent of machine path. Valid as the <logical> segment in repo:// URIs after normalization (see repo-reference.md). Generic string — not a closed enum."
+    },
+    "source_revision": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Pinned logical VCS revision that anchors the load. Format is VCS-agnostic."
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "profile"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Discovery Engine name as a generic non-empty string. Not a closed enum in this contract."
+        },
+        "profile": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Engine profile as a generic non-empty string."
+        }
+      }
+    },
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Artifact Adapter version that will read these artifacts."
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Optional adapter implementation name. Generic string when present."
+        }
+      },
+      "description": "Adapter identity for the load. version is required; name is optional metadata."
+    },
+    "acquisition_mode": {
+      "type": "string",
+      "enum": ["reused", "fresh"],
+      "description": "How Native Artifacts were obtained for this load. reused: existing artifacts whose declared revision matches source_revision were reused without a new engine run. fresh: Discovery Engine was invoked to produce artifacts for this load. Describes this load only — not a multi-run history. Excluded from manifest id derivation."
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "Complete inventory of preserved native/index/projection artifacts for this load (current set only). Empty only when the engine produced nothing (still a valid incomplete load signal when paired with freshness). Raw bytes are NOT embedded; only path/hash/metadata.",
+      "items": {
+        "$ref": "#/$defs/artifactEntry"
+      }
+    },
+    "freshness": {
+      "$ref": "#/$defs/freshnessMetadata",
+      "description": "Observational freshness metadata. Timestamps here are metadata only and MUST NOT participate in manifest id or canonical_graph_hash inputs."
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "logicalRepo": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^@/\\s]+$",
+      "description": "Single-token logical repository identity accepted by repo://. No slash, @, or whitespace."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex-encoded SHA-256 digest of artifact bytes."
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:(?!\\.{1,2}(?:/|$))[^\\\\/\\s\\x00%?#@]+)(?:/(?!\\.{1,2}(?:/|$))[^\\\\/\\s\\x00%?#@]+)*$",
+      "description": "Repository-relative path using forward slashes. One or more segments; each segment non-empty, not '.' or '..', no backslash, whitespace, NUL, or reserved characters % ? # @. No percent-encoding. No absolute paths."
+    },
+    "artifactRole": {
+      "type": "string",
+      "enum": ["native", "index", "projection"],
+      "description": "native: producer-owned primary output preserved intact in-place. index: machine-oriented index derived by the engine. projection: human-oriented disposable view (never factual input)."
+    },
+    "artifactEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "content_sha256",
+        "role",
+        "declared_revision",
+        "status"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath",
+          "description": "Relative path of the artifact as inventoried for the logical repository. Must match ArtifactReference.artifact_path when referenced."
+        },
+        "content_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 of the exact bytes of the artifact in the target context (in-place). Not a copy into harness output."
+        },
+        "role": {
+          "$ref": "#/$defs/artifactRole"
+        },
+        "declared_revision": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Revision the producer declared when emitting the artifact. May equal source_revision or a producer-specific production revision string."
+        },
+        "media_type": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Optional IANA media type or producer content-type hint."
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional byte length of the artifact content in the target context."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["complete", "incompleto"],
+          "description": "complete: artifact fully captured in inventory. incompleto: partial capture after engine failure or partial run (FLOW phase 2)."
+        }
+      }
+    },
+    "freshnessMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_revision"],
+      "properties": {
+        "source_revision": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Echo of the load anchor revision for freshness checks. v1 records source_revision; incremental updater is out of scope."
+        },
+        "observed_at": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional RFC 3339 timestamp of when artifacts were observed. Metadata only; excluded from manifest id and canonical_graph_hash."
+        },
+        "producer_run_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Optional producer run correlation id. Metadata only; excluded from manifest id and canonical_graph_hash."
+        }
+      },
+      "description": "Freshness and observational metadata. Timestamps and run ids are not canonical identity."
+    }
+  }
+}

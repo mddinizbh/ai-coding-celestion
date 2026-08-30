@@ -1,0 +1,8 @@
+{
+  "package": "graphifyy",
+  "version": "0.9.32",
+  "source_commit": "00efd6e7969837ae4a9f11d8d504dcd3b20b09df",
+  "cli": "graphify extract --code-only --no-cluster --out",
+  "fixture_project": "skills/descobrir/test/fixtures/graphify/project",
+  "notes": "Sanitized real extract; relative source_file only; tokens stripped; links variant is edges renamed for dual-key coverage."
+}

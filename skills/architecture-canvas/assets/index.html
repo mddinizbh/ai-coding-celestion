@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Architecture Canvas</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Ccircle cx='4' cy='4' r='3' fill='%237c8cff'/%3E%3C/svg%3E">
+  <script>
+    document.documentElement.classList.toggle("dark", localStorage.getItem("architecture-canvas-theme") !== "light");
+  </script>
+  <link rel="stylesheet" href="./assets/style.css">
+</head>
+<body>
+  <main class="ac-app">
+    <header class="ac-toolbar" id="toolbar">
+      <div class="ac-brand">Architecture Canvas <span>mesa de desenho</span></div>
+      <div class="ac-tools">
+        <button class="ac-button" data-action="add">Novo nó</button>
+        <button class="ac-button" data-action="connect" data-mode="connect">Conectar</button>
+        <button class="ac-button" data-action="group">Agrupar</button>
+        <button class="ac-button" data-action="align-h">Alinhar H</button>
+        <button class="ac-button" data-action="align-v">Alinhar V</button>
+        <button class="ac-button" data-action="distribute-h">Distribuir H</button>
+        <button class="ac-button" data-action="distribute-v">Distribuir V</button>
+      </div>
+      <div class="ac-tools right">
+        <span id="status" data-valid="true">Grafo válido</span>
+        <button class="ac-button" data-action="undo">Undo</button>
+        <button class="ac-button" data-action="redo">Redo</button>
+        <button class="ac-button" data-action="fit">Fit</button>
+        <button class="ac-button" data-action="validate">Validar</button>
+        <button class="ac-button" data-action="download-json">JSON</button>
+        <button class="ac-button" data-action="download-svg">SVG</button>
+        <label class="ac-import">Importar<input id="import-file" type="file" accept="application/json"></label>
+      </div>
+    </header>
+    <section class="ac-canvas" id="canvas" aria-label="Mesa de desenho arquitetural">
+      <svg id="canvas-svg" role="application" aria-label="Canvas de arquitetura">
+        <defs>
+          <marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker>
+          <marker id="arrow-success" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--success)"/></marker>
+          <marker id="arrow-warning" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--warning)"/></marker>
+          <marker id="arrow-data" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--data)"/></marker>
+          <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker>
+        </defs>
+        <g id="viewport"></g>
+      </svg>
+    </section>
+    <aside class="ac-inspector">
+      <h2>Inspector</h2>
+      <p>Arraste componentes livremente. Arraste um grupo para mover seus membros. Clique em Conectar e depois em dois nós para criar uma aresta.</p>
+      <div id="inspector-fields"></div>
+    </aside>
+  </main>
+  <div id="tooltip" hidden></div>
+  <script type="module" src="./assets/js/app.mjs"></script>
+</body>
+</html>

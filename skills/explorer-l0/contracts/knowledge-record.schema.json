@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-coding-celestion.local/skills/explorer-l0/contracts/knowledge-record.schema.json",
+  "title": "Descobrir v1 KnowledgeRecord",
+  "description": "Generic machine-readable Knowledge Record contract for Descobrir v1. Relations are separate records (see relation.schema.json), never embedded in attributes. Project Profiles narrow type, attributes, and natural-key rules. Storage technology is intentionally unspecified. IDs are unique within namespace. Status comprovado requires at least one verified repository evidence on this record; artifact evidence alone never implies comprovado. Must not contain secrets, env values, connection strings, raw code payloads, absolute paths, or dirty-file contents in summary/attributes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "namespace",
+    "type",
+    "name",
+    "summary",
+    "attributes",
+    "status",
+    "source_revision",
+    "source_engine",
+    "evidence"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/canonicalRecordId",
+      "description": "Deterministic Canonical ID derived from type + normalized natural_key. Unique within namespace. Excludes machine paths, source_revision, engine identity, and timestamps."
+    },
+    "namespace": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Knowledge Namespace of the owning project. Persistence does not cross namespaces. Generic string; profiles may constrain values."
+    },
+    "type": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Record type as a non-empty string. Closed enumerations belong in Project Profiles, not this generic contract."
+    },
+    "name": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Human-readable display name. Must not be used as Canonical ID."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Short factual summary. Narrative compression must not mutate id, attributes, evidence, status, or hashes. Must not embed secrets, env values, connection strings, raw code payloads, absolute paths, or dirty-file contents."
+    },
+    "attributes": {
+      "type": "object",
+      "description": "Typed payload bag for profile-specific fields. Keys and value shapes are narrowed by Project Profile; this contract only requires an object. Must not embed secrets, env values, connection strings, raw code payloads, absolute paths, or dirty-file contents. Relations must not be embedded here.",
+      "additionalProperties": true
+    },
+    "status": {
+      "$ref": "#/$defs/sourceStatus",
+      "description": "Source-status of the factual claim (enum value, never a separate flag). comprovado is allowed only when this record's evidence contains a resolvable repository reference verified against source_revision."
+    },
+    "source_revision": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Logical VCS revision at which the fact was observed. Format is engine/VCS-agnostic (not restricted to 40-char hex). v1 records this field; incremental freshness updater is out of scope."
+    },
+    "source_engine": {
+      "$ref": "#/$defs/sourceEngine"
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Discriminated evidence list. Repository evidence anchors code truth at pinned revision; artifact evidence anchors what a Discovery Engine emitted. Artifact evidence alone must not yield status comprovado. Each comprovado record must carry its own verified repository evidence.",
+      "minItems": 1,
+      "contains": {
+        "type": "object",
+        "required": ["kind"],
+        "properties": {
+          "kind": {
+            "const": "artifact"
+          }
+        }
+      },
+      "minContains": 1,
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "comprovado"
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "contains": {
+              "type": "object",
+              "required": ["kind"],
+              "properties": {
+                "kind": {
+                  "const": "repository"
+                }
+              }
+            },
+            "description": "comprovado requires at least one repository evidence item on this record. Artifact-only evidence is insufficient."
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonicalRecordId": {
+      "type": "string",
+      "minLength": 3,
+      "pattern": "^[^:\\s]+:.+$",
+      "description": "Type-prefixed Canonical ID: <type>:<normalized-natural-key>. Non-empty on both sides of the first colon. Unique within namespace."
+    },
+    "sourceStatus": {
+      "type": "string",
+      "enum": ["comprovado", "hipótese", "contradição", "stale"],
+      "description": "comprovado: this record has verified repository evidence at source_revision. hipótese: artifact-only or unverified/unresolvable repository evidence. contradição: status (never a flag) for incompatible claims; none promoted canonical. stale: code advanced past source_revision; consumed by later freshness checks; v1 only records source_revision."
+    },
+    "sourceEngine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "profile",
+        "adapter_version",
+        "artifact_manifest_id"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Discovery Engine name as a generic non-empty string. Not a closed enum in this contract."
+        },
+        "profile": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Engine profile name as a generic non-empty string. Narrowed by profiles, not here."
+        },
+        "adapter_version": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Artifact Adapter version that produced this record."
+        },
+        "artifact_manifest_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Content-addressed Artifact Manifest id (see artifact-manifest.schema.json). Links the record to the in-place artifact inventory."
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex-encoded SHA-256 digest."
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:(?!\\.{1,2}(?:/|$))[^\\\\/\\s\\x00%?#@]+)(?:/(?!\\.{1,2}(?:/|$))[^\\\\/\\s\\x00%?#@]+)*$",
+      "description": "Same strict relativePath constraints as Artifact Manifest entries. Must resolve to a matching manifest artifact path."
+    },
+    "lineRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_line", "end_line"],
+      "properties": {
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "description": "Inclusive 1-based line range. end_line must be >= start_line (enforced by producers; documented in repo-reference.md)."
+    },
+    "repositoryEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "uri"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "repository"
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^repo://[^@/\\s]+@[^/\\s]+/(?:(?!\\.{1,2}(?:/|$))[^\\\\/#\\s%@?]+)(?:/(?!\\.{1,2}(?:/|$))[^\\\\/#\\s%@?]+)*#L[1-9][0-9]*-L[1-9][0-9]*$",
+          "description": "Machine-independent Repository Reference per repo-reference.md: repo://<logical>@<revision>/<relative-path>#Lx-Ly. Path segments reject '.', '..', whitespace, backslash, percent-encoding, and reserved characters % ? # @. end_line >= start_line is a producer invariant. Repo and revision remain generic non-empty strings."
+        }
+      }
+    },
+    "artifactEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "manifest_id",
+        "artifact_path",
+        "content_sha256",
+        "range"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "artifact"
+        },
+        "manifest_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Artifact Manifest ID that lists the referenced native artifact."
+        },
+        "artifact_path": {
+          "$ref": "#/$defs/relativePath",
+          "description": "Relative path of the artifact within the manifest inventory. Same constraints as manifest entry path. Must resolve to a matching manifest artifact with the same content_sha256. Never an absolute machine path."
+        },
+        "content_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 of the artifact bytes as recorded in the Artifact Manifest (in-place target context)."
+        },
+        "range": {
+          "$ref": "#/$defs/lineRange",
+          "description": "Inclusive line range inside the native artifact."
+        }
+      },
+      "description": "Exact shape: {kind:\"artifact\",manifest_id,artifact_path,content_sha256,range}. Proves what a Discovery Engine emitted. Alone, it must not promote status to comprovado."
+    },
+    "evidence": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/repositoryEvidence"
+        },
+        {
+          "$ref": "#/$defs/artifactEvidence"
+        }
+      ],
+      "description": "Discriminated union on kind: repository | artifact."
+    }
+  }
+}

@@ -1,0 +1,483 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-dev-harness.local/skills/explorer-query/contracts/context-slice.schema.json",
+  "title": "Context Slice Engine v2 — Slice",
+  "description": "Canonical payload for a materialized Context Slice. Content-addressed derived cache: slice_hash is sha256 over the canonical payload excluding the audit envelope. The audit envelope is a sibling property bag populated by the persistence layer and is NEVER part of the hashed payload. Timestamps and durations live ONLY inside audit; canonical payload properties are clock-free. Persisted complete relative to the indexed graph (Locked decision #6); token/node/edge budgets apply only at the Pack layer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "slice_id",
+    "slice_hash",
+    "derivation_key",
+    "id_version",
+    "engine_version",
+    "slice_schema_version",
+    "system_namespace",
+    "policy",
+    "seeds",
+    "l0_baselines",
+    "l1",
+    "l2_bindings",
+    "nodes",
+    "edges",
+    "misses",
+    "coverage",
+    "provenance"
+  ],
+  "properties": {
+    "slice_id": {
+      "$ref": "#/$defs/sliceId",
+      "description": "Stable identifier: 'slice:' + slice_hash."
+    },
+    "slice_hash": {
+      "$ref": "#/$defs/sha256",
+      "description": "sha256 over the canonical payload (audit envelope excluded)."
+    },
+    "derivation_key": {
+      "$ref": "#/$defs/sha256",
+      "description": "sha256 over the full derivation key struct: normalized seeds, traversal policy and version, accepted-baseline hashes, system/journey hashes, engine/schema versions, and materialization options (Locked decision #4)."
+    },
+    "id_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Layered identity version (ADR 0009). Every v2 Slice carries id_version=2. Participates in derivation_key and slice_hash so a version bump invalidates all downstream identities."
+    },
+    "engine_version": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Materializer engine version. Equal derivation keys MUST produce equal engine_version."
+    },
+    "slice_schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Version of this schema used to produce the payload. ADR 0009: integer (v2=2), consistent with explorer_schema_versions.version INTEGER and buildDerivationInputs()."
+    },
+    "system_namespace": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Knowledge Namespace of the project the Slice was materialized for."
+    },
+    "policy": {
+      "$ref": "#/$defs/policy",
+      "description": "Traversal policy name, version, and options hash. options_hash participates in derivation_key."
+    },
+    "seeds": {
+      "type": "array",
+      "description": "Normalized seeds used to bootstrap materialization. Order is producer-canonical.",
+      "items": {
+        "$ref": "#/$defs/seed"
+      }
+    },
+    "l0_baselines": {
+      "type": "array",
+      "description": "Accepted L0 baselines referenced by the Slice. Each baseline's canonical_graph_hash participates in derivation_key.",
+      "items": {
+        "$ref": "#/$defs/l0Baseline"
+      }
+    },
+    "l1": {
+      "$ref": "#/$defs/l1Ref",
+      "description": "L1 edge set used by the Slice. L1 is cross-repo only (Locked decision #9)."
+    },
+    "l2_bindings": {
+      "type": "array",
+      "description": "L2 JourneySpec bindings referenced. journey_hash participates in derivation_key.",
+      "items": {
+        "$ref": "#/$defs/l2Binding"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Nodes in the materialized subgraph, canonical order.",
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Edges in the materialized subgraph, canonical order.",
+      "items": {
+        "$ref": "#/$defs/edge"
+      }
+    },
+    "misses": {
+      "type": "array",
+      "description": "Explicit misses: missing indexing, unresolved dispatch, uncertain links, policy boundaries (Locked decision #11).",
+      "items": {
+        "$ref": "#/$defs/miss"
+      }
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage",
+      "description": "Indexed-vs-visited coverage counters. Completeness is relative to the indexed graph."
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance",
+      "description": "Structural provenance summary (seed-set hash and counts). No clock fields."
+    },
+    "audit": {
+      "$ref": "#/$defs/audit",
+      "description": "Telemetry envelope populated by the persistence layer. OPTIONAL and NEVER part of the canonical payload that is hashed."
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex-encoded SHA-256 digest (64 chars). Matches skills/explorer-l0/src/stable-json.mjs sha256Text output."
+    },
+    "sliceId": {
+      "type": "string",
+      "pattern": "^slice:[a-f0-9]{64}$",
+      "description": "Stable Slice identifier: literal prefix 'slice:' + slice_hash."
+    },
+    "canonicalId": {
+      "type": "string",
+      "minLength": 3,
+      "pattern": "^[^:\\s]+:.+$",
+      "description": "Type-prefixed Canonical ID, same shape as explorer-l0 contracts/relation.schema.json canonicalRecordId."
+    },
+    "policyName": {
+      "type": "string",
+      "enum": ["journey", "impact", "drill-down"],
+      "description": "Closed policy enum. journey: forward-oriented traversal. impact: upstream + downstream + cross-service + data deps. drill-down: explicit relationship allowlist (Locked decision #10)."
+    },
+    "factualStatus": {
+      "type": "string",
+      "enum": ["comprovado", "hipótese", "contradição", "stale"],
+      "description": "Mirrors Descobrir source-status semantics."
+    },
+    "missReason": {
+      "type": "string",
+      "enum": [
+        "no_matching_edge",
+        "no_accepted_l0",
+        "unresolved_fact_anchor",
+        "unresolved_dispatch",
+        "policy_boundary",
+        "index_missing"
+      ],
+      "description": "Closed miss-reason enum (Locked decision #11). index_missing: target not yet indexed; the others describe traversal-time gaps against an indexed graph."
+    },
+    "layerTag": {
+      "type": "string",
+      "enum": ["l0", "l1", "l2"],
+      "description": "Layer a node/edge originates from. l0 is intra-repo, l1 is cross-repo, l2 is journey bindings."
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "options_hash"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/policyName"
+        },
+        "version": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Policy version. Participates in derivation_key."
+        },
+        "options_hash": {
+          "$ref": "#/$defs/sha256",
+          "description": "sha256 over normalized materialization options. Participates in derivation_key."
+        }
+      }
+    },
+    "l0Baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "namespace",
+        "logical_repo",
+        "candidate_id",
+        "source_revision",
+        "canonical_graph_hash"
+      ],
+      "properties": {
+        "namespace": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "logical_repo": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "candidate_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Baseline candidate id that became accepted via Human Gate."
+        },
+        "source_revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "canonical_graph_hash": {
+          "$ref": "#/$defs/sha256",
+          "description": "GraphIndex.canonical_graph_hash of the accepted baseline."
+        }
+      }
+    },
+    "l1Ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system_namespace", "edge_set_hash"],
+      "properties": {
+        "system_namespace": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "edge_set_hash": {
+          "$ref": "#/$defs/sha256",
+          "description": "Deterministic hash over the accepted L1 edge set used."
+        }
+      }
+    },
+    "l2Binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["journey_id", "journey_hash"],
+      "properties": {
+        "journey_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "bind_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Optional resolved bind identifier for the journey."
+        },
+        "journey_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "label", "layer", "status"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "node"
+        },
+        "id": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "label": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "layer": {
+          "$ref": "#/$defs/layerTag"
+        },
+        "status": {
+          "$ref": "#/$defs/factualStatus"
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "to", "relation_type", "layer", "status"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "edge"
+        },
+        "from": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "to": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "relation_type": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "layer": {
+          "$ref": "#/$defs/layerTag"
+        },
+        "status": {
+          "$ref": "#/$defs/factualStatus"
+        }
+      }
+    },
+    "miss": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "miss_reason", "target_id", "detail"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "miss"
+        },
+        "miss_reason": {
+          "$ref": "#/$defs/missReason"
+        },
+        "target_id": {
+          "$ref": "#/$defs/canonicalId",
+          "description": "Canonical ID of the target the Slice failed to resolve."
+        },
+        "detail": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Human-readable miss context. No machine paths, secrets, or raw payloads."
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodes_indexed",
+        "nodes_visited",
+        "edges_indexed",
+        "edges_visited"
+      ],
+      "properties": {
+        "nodes_indexed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nodes_visited": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "edges_indexed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "edges_visited": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seed_set_hash"],
+      "properties": {
+        "seed_set_hash": {
+          "$ref": "#/$defs/sha256",
+          "description": "sha256 over the canonical normalized seed set used by the materializer."
+        },
+        "baseline_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of accepted L0 baselines referenced."
+        },
+        "edge_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of L1 edges referenced, if any."
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Persistence-layer telemetry envelope. NEVER part of the canonical hashed payload; populated only when the Slice is stored or reused.",
+      "required": ["created_at", "updated_at", "materialization_ms"],
+      "properties": {
+        "created_at": {
+          "type": "string",
+          "minLength": 1,
+          "description": "RFC3339 timestamp at first persistence."
+        },
+        "updated_at": {
+          "type": "string",
+          "minLength": 1,
+          "description": "RFC3339 timestamp at last cache hit / refresh."
+        },
+        "materialization_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Wall-clock materialization duration in milliseconds."
+        }
+      }
+    },
+    "seed": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/l0FactSeed"
+        },
+        {
+          "$ref": "#/$defs/l1EdgeSeed"
+        },
+        {
+          "$ref": "#/$defs/l2JourneySeed"
+        }
+      ]
+    },
+    "l0FactSeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "namespace",
+        "logical_repo",
+        "candidate_id",
+        "source_revision",
+        "record_id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "l0_fact"
+        },
+        "namespace": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "logical_repo": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "candidate_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "source_revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "record_id": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "relation_id": {
+          "$ref": "#/$defs/canonicalId",
+          "description": "Optional relation anchor within the same baseline."
+        }
+      }
+    },
+    "l1EdgeSeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "system_namespace", "edge_id", "edge_set_hash"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "l1_edge"
+        },
+        "system_namespace": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "edge_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "edge_set_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "l2JourneySeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "journey_id", "journey_hash"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "l2_journey"
+        },
+        "journey_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "journey_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bind_id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Optional resolved bind identifier."
+        }
+      }
+    }
+  }
+}

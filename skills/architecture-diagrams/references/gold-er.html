@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ooh · schema core — ER</title>
+<script>
+  (function () {
+    const saved = localStorage.getItem('theme');
+    const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', dark);
+  })();
+</script>
+<link rel="stylesheet" href="../../_assets/diagram.css">
+</head>
+<body>
+
+<div class="bar">
+  <div>
+    <h1>ooh · core — entidades</h1>
+    <div class="sub">PostGIS · EPSG:31983 · normalizado · dono = uai-ooh-pipeline · 35 tabelas (principais)</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="chips" id="chips">
+    <button class="chip on" data-flow="all">Tudo</button>
+    <button class="chip" data-flow="ident">Identidades</button>
+    <button class="chip" data-flow="score">Score</button>
+    <button class="chip" data-flow="reach">Reach / F2</button>
+    <button class="chip" data-flow="versao">Versionamento</button>
+  </div>
+  <button id="legendBtn">Legenda</button>
+  <a class="navlink" href="postgres-ooh.html">← postgres-ooh</a>
+  <button id="themeToggle">Tema</button>
+</div>
+
+<div class="legend" id="legend">
+  <h4>Como ler</h4>
+  <div class="row"><span class="sw store"></span> tabela — clique abre <b>todos os campos + descrição</b></div>
+  <div class="row"><span class="dotsw" style="background:var(--clay)"></span> 🔑 chave primária (PK)</div>
+  <div class="row"><span style="width:22px;border-top:1.6px solid var(--muted);display:inline-block"></span> join lógico (rótulo = chave)</div>
+  <div class="hint">no <code>ooh</code> quase não há FK declarada — as relações são <b>joins documentados</b>. Todas as tabelas têm <code>version_id</code> → <b>dataset_version</b> (swap atômico).</div>
+</div>
+
+<div class="stage" id="stage">
+<svg viewBox="0 0 1300 1050" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Diagrama ER do schema core">
+  <defs>
+    <marker id="a-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--muted)"/></marker>
+    <marker id="a-clay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--clay)"/></marker>
+  </defs>
+
+  <!-- grupos -->
+  <g class="zone"><rect x="24" y="92" width="236" height="936" rx="14"/><text class="ztitle" x="40" y="120">Versionamento</text></g>
+  <g class="zone"><rect x="276" y="92" width="236" height="936" rx="14"/><text class="ztitle" x="292" y="120">Identidades</text></g>
+  <g class="zone"><rect x="528" y="92" width="236" height="936" rx="14"/><text class="ztitle" x="544" y="120">Contexto</text></g>
+  <g class="zone"><rect x="780" y="92" width="236" height="936" rx="14"/><text class="ztitle" x="796" y="120">Métricas &amp; Score</text></g>
+  <g class="zone"><rect x="1032" y="92" width="236" height="936" rx="14"/><text class="ztitle" x="1048" y="120">Reach / F2 (audiência)</text></g>
+
+  <!-- joins (rotulados pela chave) -->
+  <path class="edge" id="j-line-met" d="M500,172 C 540,150 560,132 650,131 C 735,130 748,152 792,178"/>
+  <path class="edge" id="j-line-dem" d="M500,235 C 545,258 565,267 660,267 C 748,267 770,290 792,308"/>
+  <path class="edge" id="j-line-shape" d="M270,224 C 256,300 256,390 282,420"/>
+  <path class="edge" id="j-line-stop" d="M270,232 C 250,400 250,540 282,556"/>
+  <path class="edge" id="j-stop-pse" d="M500,335 C 522,360 520,520 520,660 C 520,695 560,695 660,695 C 800,695 900,695 960,695 C 1015,695 1032,790 1044,815"/>
+  <path class="edge" id="j-tp-ps" d="M300,758 C 290,790 290,800 300,800"/>
+  <path class="edge" id="j-reg-cs" d="M540,560 C 520,400 524,260 528,212"/>
+  <path class="edge" id="j-h3-exp" d="M1150,234 C 1150,300 1150,380 1150,396"/>
+  <path class="edge" id="j-od-exp" d="M1150,360 C 1150,372 1150,384 1150,396"/>
+  <path class="edge" id="j-exp-face" d="M1150,488 C 1150,560 1150,630 1150,650"/>
+  <path class="edge" id="j-exp-reach" d="M1044,452 C 1010,500 1010,540 1044,548"/>
+  <path class="edge" id="j-poi-exp" d="M752,360 C 775,379 810,380 900,380 C 1000,380 1028,408 1044,432"/>
+
+  <text class="elbl" id="le-line-met" x="620" y="146">line_id</text>
+  <text class="elbl" id="le-line-dem" x="615" y="274">short_name</text>
+  <text class="elbl" id="le-stop-pse" x="760" y="688">stop_id</text>
+  <text class="elbl" id="le-h3-exp" x="1156" y="350">h3_index</text>
+  <text class="elbl" id="le-exp-face" x="1156" y="600">impressoes</text>
+  <text class="elbl" id="le-od-exp" x="1090" y="388">unicos</text>
+
+  <!-- ── Versionamento ─────────────────────── -->
+  <g class="node table" data-k="dataset_version"><rect x="36" y="150" width="212" height="96" rx="9"/><text class="th" x="50" y="172">dataset_version</text><text class="pk" x="50" y="192">🔑 version_id</text><text class="m" x="50" y="208">status</text><text class="m" x="50" y="223">label · created_at</text><text class="n" x="50" y="239">5 campos</text></g>
+  <g class="node table" data-k="build_progress"><rect x="36" y="262" width="212" height="96" rx="9"/><text class="th" x="50" y="284">build_progress</text><text class="pk" x="50" y="304">🔑 version_id·target·chunk_key</text><text class="m" x="50" y="320">rows_inserted</text><text class="m" x="50" y="335">finished_at</text><text class="n" x="50" y="351">5 campos · resume</text></g>
+
+  <!-- ── Identidades ───────────────────────── -->
+  <g class="node table" data-k="line"><rect x="288" y="150" width="212" height="111" rx="9"/><text class="th" x="302" y="172">line</text><text class="pk" x="302" y="192">🔑 line_id</text><text class="m" x="302" y="208">short_name · long_name</text><text class="m" x="302" y="223">route_type · extensao_m</text><text class="m" x="302" y="238">circular_sc · suplementar</text><text class="n" x="302" y="254">8 campos · 304 linhas</text></g>
+  <g class="node table" data-k="stop"><rect x="288" y="277" width="212" height="111" rx="9"/><text class="th" x="302" y="299">stop</text><text class="pk" x="302" y="319">🔑 stop_id</text><text class="m" x="302" y="335">siu ↗ · match_dist_m</text><text class="m" x="302" y="350">stop_name · nm_bairro</text><text class="m" x="302" y="365">regional · geom_31983</text><text class="n" x="302" y="381">8 campos · 9.650 (KNN≤50m)</text></g>
+  <g class="node table" data-k="line_shape"><rect x="288" y="404" width="212" height="111" rx="9"/><text class="th" x="302" y="426">line_shape</text><text class="pk" x="302" y="446">🔑 line_id·service_type·dir</text><text class="m" x="302" y="462">shape_id · comprimento_m</text><text class="m" x="302" y="477">geom_31983 · geom_geojson</text><text class="m" x="302" y="492">itinerário por dia/sentido</text><text class="n" x="302" y="508">8 campos · 1.525</text></g>
+  <g class="node table" data-k="line_stop"><rect x="288" y="531" width="212" height="111" rx="9"/><text class="th" x="302" y="553">line_stop</text><text class="m" x="302" y="573">line_id ↗ · service_type</text><text class="m" x="302" y="588">direction · stop_sequence</text><text class="m" x="302" y="603">stop_id ↗ · is_terminal</text><text class="m" x="302" y="618">sequência ponto×linha×dia</text><text class="n" x="302" y="634">7 campos</text></g>
+  <g class="node table" data-k="trip_pattern"><rect x="288" y="658" width="212" height="111" rx="9"/><text class="th" x="302" y="680">trip_pattern</text><text class="pk" x="302" y="700">🔑 pattern_id</text><text class="m" x="302" y="716">line_id ↗ · shape_id</text><text class="m" x="302" y="731">n_stops · is_dominant</text><text class="m" x="302" y="746">geom_31983 (snap do RT)</text><text class="n" x="302" y="762">11 campos</text></g>
+  <g class="node table" data-k="pattern_stop"><rect x="288" y="785" width="212" height="96" rx="9"/><text class="th" x="302" y="807">pattern_stop</text><text class="pk" x="302" y="827">🔑 pattern_id·stop_sequence</text><text class="m" x="302" y="843">stop_id ↗ · is_terminal</text><text class="n" x="302" y="859">5 campos</text></g>
+  <g class="node table" data-k="vehicle"><rect x="288" y="897" width="212" height="96" rx="9"/><text class="th" x="302" y="919">vehicle</text><text class="pk" x="302" y="939">🔑 vehicle_id</text><text class="m" x="302" y="955">vehicle_code · rt_vehicle_id</text><text class="m" x="302" y="970">license_plate</text></g>
+
+  <!-- ── Contexto ──────────────────────────── -->
+  <g class="node table" data-k="census_sector"><rect x="540" y="150" width="212" height="111" rx="9"/><text class="th" x="554" y="172">census_sector</text><text class="pk" x="554" y="192">🔑 id · cd_setor</text><text class="m" x="554" y="208">renda_media_resp · classe</text><text class="m" x="554" y="223">populacao · densidade</text><text class="m" x="554" y="238">geom_31983 (4674→31983)</text><text class="n" x="554" y="254">17 campos · 5.166</text></g>
+  <g class="node table" data-k="poi"><rect x="540" y="277" width="212" height="111" rx="9"/><text class="th" x="554" y="299">poi</text><text class="pk" x="554" y="319">🔑 id</text><text class="m" x="554" y="335">fonte · grupo_ooh · subgrupo</text><text class="m" x="554" y="350">marca · relevancia_prospeccao</text><text class="m" x="554" y="365">geom_31983 · link_grupo_id</text><text class="n" x="554" y="381">25 campos · 248.353</text></g>
+  <g class="node table" data-k="road_segment"><rect x="540" y="404" width="212" height="111" rx="9"/><text class="th" x="554" y="426">road_segment</text><text class="pk" x="554" y="446">🔑 id</text><text class="m" x="554" y="462">nome_logradouro · tipo</text><text class="m" x="554" y="477">classe_arterial (proxy)</text><text class="m" x="554" y="492">largura_m · is_via_referencia</text><text class="n" x="554" y="508">13 campos · 55.143</text></g>
+  <g class="node table" data-k="regional"><rect x="540" y="531" width="212" height="96" rx="9"/><text class="th" x="554" y="553">regional</text><text class="pk" x="554" y="573">🔑 regional_id</text><text class="m" x="554" y="589">nome · n_setores</text><text class="m" x="554" y="604">area_km2 · geom_31983</text><text class="n" x="554" y="620">9 campos · 9 regionais</text></g>
+
+  <!-- ── Métricas & Score ──────────────────── -->
+  <g class="node table" data-k="line_metrics"><rect x="792" y="150" width="212" height="111" rx="9"/><text class="th" x="806" y="172">line_metrics</text><text class="m" x="806" y="192">line_id ↗ · score_total</text><text class="m" x="806" y="208">impressoes_{util,sab,dom,mes}</text><text class="m" x="806" y="223">s_impr · s_perfil · s_arterial</text><text class="m" x="806" y="238">pct_ab · n_poi_total</text><text class="n" x="806" y="254">39 campos · 303 linhas</text></g>
+  <g class="node table" data-k="line_profile_demografico"><rect x="792" y="277" width="212" height="96" rx="9"/><text class="th" x="806" y="299">line_profile_demografico</text><text class="m" x="806" y="319">line_id ↗ · classe_renda</text><text class="m" x="806" y="335">pop · pct</text><text class="n" x="806" y="351">5 campos · distribuição A–E</text></g>
+  <g class="node table" data-k="line_demand_daily"><rect x="792" y="389" width="212" height="96" rx="9"/><text class="th" x="806" y="411">line_demand_daily</text><text class="m" x="806" y="431">line_short_name ↗ · tipo_dia</text><text class="m" x="806" y="447">total_usuarios · pax_por_dia</text><text class="n" x="806" y="463">8 campos · volume MCO</text></g>
+  <g class="node table" data-k="line_boarding_profile"><rect x="792" y="501" width="212" height="81" rx="9"/><text class="th" x="806" y="523">line_boarding_profile</text><text class="m" x="806" y="543">line_short_name ↗ · faixa</text><text class="m" x="806" y="559">share_embarque</text><text class="n" x="806" y="575">4 campos · curva horária</text></g>
+
+  <!-- ── Reach / F2 ────────────────────────── -->
+  <g class="node table" data-k="h3_cell"><rect x="1044" y="150" width="212" height="96" rx="9"/><text class="th" x="1058" y="172">h3_cell</text><text class="pk" x="1058" y="192">🔑 h3_index</text><text class="m" x="1058" y="208">pop · renda_media · classe</text><text class="m" x="1058" y="223">geom · área (grid res 9)</text><text class="n" x="1058" y="239">8 campos</text></g>
+  <g class="node table" data-k="od_trip"><rect x="1044" y="262" width="212" height="111" rx="9"/><text class="th" x="1058" y="284">od_trip</text><text class="pk" x="1058" y="304">🔑 id</text><text class="m" x="1058" y="320">id_usuario · tipo_dia</text><text class="m" x="1058" y="335">h3_origem ↗ · h3_destino ↗</text><text class="m" x="1058" y="350">faixa_horaria (bilhetagem)</text><text class="n" x="1058" y="366">11 campos</text></g>
+  <g class="node table" data-k="exposure_cell"><rect x="1044" y="389" width="212" height="111" rx="9"/><text class="th" x="1058" y="411">exposure_cell</text><text class="pk" x="1058" y="431">🔑 h3_index·tipo_dia·faixa</text><text class="m" x="1058" y="447">unicos_hora · footfall</text><text class="m" x="1058" y="462">pop · renda_media · classe</text><text class="m" x="1058" y="477">superfície H3 × hora</text><text class="n" x="1058" y="493">9 campos</text></g>
+  <g class="node table" data-k="line_reach"><rect x="1044" y="516" width="212" height="111" rx="9"/><text class="th" x="1058" y="538">line_reach</text><text class="pk" x="1058" y="558">🔑 id</text><text class="m" x="1058" y="574">line_id ↗ · grao · reach_od</text><text class="m" x="1058" y="589">metodo (estimada|medida)</text><text class="m" x="1058" y="604">selo_confianca · rotulo</text><text class="n" x="1058" y="620">14 campos · medida 13.437</text></g>
+  <g class="node table" data-k="face_reach"><rect x="1044" y="643" width="212" height="111" rx="9"/><text class="th" x="1058" y="665">face_reach</text><text class="pk" x="1058" y="685">🔑 id</text><text class="m" x="1058" y="701">vehicle_id ↗ · tipo_dia</text><text class="m" x="1058" y="716">impressoes · reach · freq</text><text class="m" x="1058" y="731">metodo · selo_confianca</text><text class="n" x="1058" y="747">11 campos · medida 2.698</text></g>
+  <g class="node table" data-k="pattern_stop_exposure"><rect x="1044" y="770" width="212" height="111" rx="9"/><text class="th" x="1058" y="792">pattern_stop_exposure</text><text class="pk" x="1058" y="812">🔑 stop_id·faixa_horaria</text><text class="m" x="1058" y="828">v_real (medido) ↗</text><text class="m" x="1058" y="843">n_amostras · metodo</text><text class="m" x="1058" y="858">velocidade real na parada</text><text class="n" x="1058" y="874">6 campos · 3.013</text></g>
+</svg>
+
+  <div class="src">banco ooh · schema core · introspecção MCP + plano-normalizacao-core.md · jun/2026</div>
+
+  <div class="card" id="flowcap"><div class="fname" id="f-name"></div><ol id="f-steps"></ol></div>
+  <div class="card" id="detail">
+    <h3 id="d-title">Clique numa tabela</h3>
+    <div class="meta" id="d-meta">todos os campos + descrição</div>
+    <p id="d-body">Diagrama ER do schema <b>core</b> (normalizado, EPSG:31983). Cada card mostra a PK e campos-chave; <b>clique</b> abre <b>todos os campos com tipo e descrição</b>. Setas = joins lógicos (rótulo = chave). <code>version_id</code> liga tudo ao <b>dataset_version</b>.</p>
+  </div>
+</div>
+
+<script>
+const V = { n:"version_id", ty:"int", d:"FK lógica → dataset_version (swap ACTIVE)" };
+const GEOM = { n:"geom_31983", ty:"geometry", d:"geometria métrica EPSG:31983 (cálculo PostGIS)" };
+const GEOJSON = { n:"geom_geojson", ty:"jsonb", d:"mesma geometria em GeoJSON 4326 (web)" };
+window.DETAIL = {
+  dataset_version: { t:"core.dataset_version", m:"versionamento · 5 campos", note:"Versão imutável de um build; swap atômico BUILDING/ACTIVE/ARCHIVED. Todas as tabelas referenciam por version_id.", fields:[
+    {n:"version_id",ty:"int",pk:true,d:"PK da versão do dataset"},
+    {n:"label",ty:"text",nn:true,d:"rótulo legível do build"},
+    {n:"status",ty:"text",d:"BUILDING | ACTIVE | ARCHIVED"},
+    {n:"created_at",ty:"timestamptz",d:"criação do build"},
+    {n:"notes",ty:"text",nn:true,d:"observações"} ]},
+  build_progress: { t:"core.build_progress", m:"resume do ChunkedBuild · 5 campos", note:"Rastreia chunks já commitados por (versão, alvo, chave) → resume por chave entre runs.", fields:[
+    {n:"version_id",ty:"int",pk:true,d:"versão do build"},
+    {n:"target",ty:"text",pk:true,d:"tabela-alvo (ex.: core.stop)"},
+    {n:"chunk_key",ty:"text",pk:true,d:"chave do chunk já processado"},
+    {n:"rows_inserted",ty:"int",d:"linhas inseridas no chunk"},
+    {n:"finished_at",ty:"timestamptz",d:"fim do chunk"} ]},
+  line: { t:"core.line", m:"catálogo de linhas · 8 campos · 304", note:"Identidade da linha (A1). Casa com MCO/embarque por short_name (~99%).", fields:[
+    {n:"line_id",ty:"text",pk:true,d:"PK (route_id do GTFS)"},
+    {n:"short_name",ty:"text",nn:true,d:"código da linha (= route_short_name; chave de junção com MCO/embarque)"},
+    {n:"long_name",ty:"text",nn:true,d:"nome do itinerário"},
+    {n:"route_type",ty:"text",nn:true,d:"tipo GTFS"},
+    {n:"is_circular_sc",ty:"bool",nn:true,d:"circular do centro (SC*)"},
+    {n:"is_suplementar",ty:"bool",nn:true,d:"linha suplementar (S*)"},
+    {n:"extensao_m",ty:"float8",nn:true,d:"extensão em metros"}, V ]},
+  stop: { t:"core.stop", m:"pontos · 8 campos · 9.650", note:"Ponto reconciliado por KNN ≤50m (GTFS stop ↔ ponto_onibus): mediana 0m, p90 3,9m.", fields:[
+    {n:"stop_id",ty:"text",pk:true,d:"PK (GTFS stop_id)"},
+    {n:"stop_name",ty:"text",nn:true,d:"nome do ponto"},
+    GEOM,
+    {n:"siu",ty:"text",nn:true,fk:true,d:"SIU do ponto PBH (ponte p/ embarque); via KNN"},
+    {n:"match_dist_m",ty:"float8",nn:true,d:"distância do match KNN (m)"},
+    {n:"nm_bairro",ty:"text",nn:true,d:"bairro"},
+    {n:"regional",ty:"text",nn:true,d:"Regional administrativa do ponto (T8b), herdada do setor mais próximo (KNN)"}, V ]},
+  line_shape: { t:"core.line_shape", m:"trajeto por dia/sentido · 8 · 1.525", note:"Shape mais longo por (service_type, direction) — itinerário varia por tipo de dia.", fields:[
+    {n:"line_id",ty:"text",pk:true,fk:true,d:"→ line"},
+    {n:"service_type",ty:"text",pk:true,d:"util | sab | dom"},
+    {n:"direction",ty:"int",pk:true,d:"sentido (0/1)"},
+    {n:"shape_id",ty:"text",nn:true,d:"shape GTFS de origem"},
+    GEOM, GEOJSON,
+    {n:"comprimento_m",ty:"float8",nn:true,d:"comprimento do traçado (m)"}, V ]},
+  line_stop: { t:"core.line_stop", m:"sequência ponto×linha×dia · 7", note:"Sequência de paradas por linha/serviço/sentido (trip representativo).", fields:[
+    {n:"line_id",ty:"text",nn:true,fk:true,d:"→ line"},
+    {n:"service_type",ty:"text",nn:true,d:"util|sab|dom"},
+    {n:"direction",ty:"int",nn:true,d:"sentido"},
+    {n:"stop_sequence",ty:"int",nn:true,d:"ordem na linha"},
+    {n:"stop_id",ty:"text",nn:true,fk:true,d:"→ stop"},
+    {n:"is_terminal",ty:"bool",nn:true,d:"terminal"}, V ]},
+  trip_pattern: { t:"core.trip_pattern", m:"padrão de viagem · 11", note:"Padrão geométrico usado no snap do RT (F2) e na cobertura.", fields:[
+    {n:"pattern_id",ty:"int8",pk:true,d:"PK do padrão"},
+    {n:"line_id",ty:"text",nn:true,fk:true,d:"→ line"},
+    {n:"service_type",ty:"text",nn:true,d:"util|sab|dom"},
+    {n:"direction",ty:"int",nn:true,d:"sentido"},
+    {n:"shape_id",ty:"text",nn:true,d:"shape de origem"},
+    {n:"n_trips",ty:"int",nn:true,d:"nº de trips no padrão"},
+    {n:"comprimento_m",ty:"float8",nn:true,d:"comprimento (m)"},
+    {n:"n_stops",ty:"int",nn:true,d:"nº de paradas"},
+    {n:"is_dominant",ty:"bool",nn:true,d:"padrão dominante da linha"}, GEOM, V ]},
+  pattern_stop: { t:"core.pattern_stop", m:"paradas do padrão · 5", fields:[
+    {n:"pattern_id",ty:"int8",pk:true,fk:true,d:"→ trip_pattern"},
+    {n:"stop_id",ty:"text",nn:true,fk:true,d:"→ stop"},
+    {n:"stop_sequence",ty:"int",pk:true,d:"ordem"},
+    {n:"is_terminal",ty:"bool",nn:true,d:"terminal"}, V ]},
+  vehicle: { t:"core.vehicle", m:"frota (auxiliar) · 5", note:"vehicle_code = vehicle.id do feed (F2-#8, match 85–89%).", fields:[
+    {n:"vehicle_id",ty:"text",pk:true,d:"PK (veículo MCO)"},
+    {n:"rt_vehicle_id",ty:"text",nn:true,d:"id no GTFS-RT (legado; deixou de ser chave)"},
+    {n:"vehicle_code",ty:"text",nn:true,d:"código do veículo = id do feed RT (chave F2)"},
+    {n:"license_plate",ty:"text",nn:true,d:"placa"}, V ]},
+  census_sector: { t:"core.census_sector", m:"setor + renda/classe · 17 · 5.166", note:"Renda do RESPONSÁVEL pelo domicílio (censo 2022, medida). geom 4674→31983.", fields:[
+    {n:"id",ty:"int8",pk:true,d:"PK"},
+    {n:"cd_setor",ty:"text",d:"código do setor censitário (junção com agregados)"},
+    {n:"nm_bairro",ty:"text",nn:true,d:"bairro"},
+    {n:"populacao",ty:"int",nn:true,d:"população residente"},
+    {n:"domicilios",ty:"int",nn:true,d:"domicílios"},
+    {n:"densidade_hab_km2",ty:"num",nn:true,d:"densidade hab/km²"},
+    {n:"renda_media_resp",ty:"num",nn:true,d:"Renda MÉDIA do responsável pelo domicílio (v06004, censo 2022). NÃO renda domiciliar total. Medida."},
+    {n:"renda_mediana_resp",ty:"num",nn:true,d:"Renda mediana do responsável (v06006, 2022). Medida."},
+    {n:"classe_renda",ty:"char",nn:true,d:"Classe A–E por QUINTIL de renda DENTRO de BH (não Critério Brasil). A=superior, E=inferior."},
+    GEOM, GEOJSON,
+    {n:"valid_from",ty:"date",d:"vigência início"},
+    {n:"valid_to",ty:"date",nn:true,d:"vigência fim"},
+    {n:"is_current",ty:"bool",d:"versão corrente"}, V,
+    {n:"regional",ty:"text",nn:true,d:"Regional administrativa (T8b) por interseção; bairro fronteiriço por dominância de área."} ]},
+  poi: { t:"core.poi", m:"pontos de interesse · 25 · 248.353", note:"3 fontes (overture/fsq/osm) unificadas e classificadas. grupo_ooh entra no score; multi-fonte só p/ prospecção.", fields:[
+    {n:"id",ty:"int8",pk:true,d:"PK"},
+    {n:"fonte",ty:"text",d:"overture | fsq | osm"},
+    {n:"fonte_id",ty:"text",d:"id na fonte"},
+    {n:"nome",ty:"text",nn:true,d:"nome do POI"},
+    {n:"endereco",ty:"text",nn:true,d:"endereço"},
+    {n:"bairro",ty:"text",nn:true,d:"bairro"},
+    {n:"telefone",ty:"text",nn:true,d:"telefone (prospecção)"},
+    {n:"website",ty:"text",nn:true,d:"site"},
+    {n:"redes_sociais",ty:"jsonb",nn:true,d:"redes sociais"},
+    {n:"tem_contato",ty:"bool",nn:true,d:"tem canal de contato"},
+    {n:"grupo_ooh",ty:"text",d:"grupo OOH (alimentação/comércio/educação/saúde…) — entra no score"},
+    {n:"subgrupo",ty:"text",nn:true,d:"subgrupo"},
+    {n:"marca",ty:"text",nn:true,d:"marca/rede"},
+    {n:"relevancia_prospeccao",ty:"int2",d:"relevância p/ prospecção (≥1 conta no corredor)"},
+    {n:"confidence",ty:"num",nn:true,d:"confiança da fonte"},
+    {n:"link_grupo_id",ty:"int8",nn:true,d:"agrupa o MESMO POI entre fontes (dedup; nulo = não linkado)"},
+    GEOM, GEOJSON,
+    {n:"valid_from",ty:"date",d:"vigência início"},
+    {n:"is_current",ty:"bool",d:"corrente"}, V ]},
+  road_segment: { t:"core.road_segment", m:"malha viária · 13 · 55.143", note:"classe_arterial = PROXY de hierarquia por tipo+largura (não classificação oficial).", fields:[
+    {n:"id",ty:"int8",pk:true,d:"PK"},
+    {n:"id_trecho",ty:"text",nn:true,d:"id do trecho PBH"},
+    {n:"id_logradouro",ty:"text",nn:true,d:"id do logradouro"},
+    {n:"nome_logradouro",ty:"text",nn:true,d:"nome da via"},
+    {n:"tipo_logradouro",ty:"text",nn:true,d:"AVENIDA/RUA/RODOVIA…"},
+    {n:"largura_m",ty:"num",nn:true,d:"largura (m)"},
+    {n:"classe_arterial",ty:"text",nn:true,d:"PROXY arterial/coletora/local por tipo+largura — NÃO é classificação funcional da BHTrans"},
+    {n:"is_via_referencia",ty:"bool",d:"é uma das 35 Vias de Referência"},
+    GEOM,
+    {n:"valid_from",ty:"date",d:"vigência início"},
+    {n:"is_current",ty:"bool",d:"corrente"}, V ]},
+  regional: { t:"core.regional", m:"regional administrativa · 9", fields:[
+    {n:"regional_id",ty:"int8",pk:true,d:"PK"},
+    {n:"nome",ty:"text",d:"nome da regional (9 de BH)"},
+    GEOM,
+    {n:"area_km2",ty:"num",nn:true,d:"área km²"},
+    {n:"n_setores",ty:"int",nn:true,d:"nº de setores"},
+    {n:"valid_from",ty:"date",d:"vigência"},
+    {n:"is_current",ty:"bool",d:"corrente"}, V ]},
+  line_metrics: { t:"core.line_metrics", m:"saída do produto · 39 · 303", note:"⚠️ ranking/score vendável; impressões absolutas ilustrativas (coef. não calibrados).", fields:[
+    {n:"line_id",ty:"text",fk:true,d:"→ line"},
+    {n:"comprimento_m",ty:"num",nn:true,d:"comprimento do trajeto"},
+    {n:"pop_corredor",ty:"num",nn:true,d:"população do corredor"},
+    {n:"pop_corredor_pond",ty:"num",nn:true,d:"pop ponderada por área"},
+    {n:"renda_media_pop",ty:"num",nn:true,d:"renda média ponderada por pop (alcance residencial)"},
+    {n:"classe_predom",ty:"char",nn:true,d:"classe predominante"},
+    {n:"pct_ab",ty:"num",nn:true,d:"% pop A+B (quintil-de-BH; ~82% em corredor rico é esperado)"},
+    {n:"pct_de",ty:"num",nn:true,d:"% pop D+E"},
+    {n:"renda_trecho",ty:"num",nn:true,d:"2ª lente: renda ponderada por DISTÂNCIA do trajeto (onde o anúncio circula)"},
+    {n:"pct_trecho_ab",ty:"num",nn:true,d:"% A+B por trecho"},
+    {n:"pct_trecho_de",ty:"num",nn:true,d:"% D+E por trecho"},
+    {n:"n_poi_alimentacao",ty:"int",nn:true,d:"POIs alimentação"},
+    {n:"n_poi_comercio",ty:"int",nn:true,d:"POIs comércio"},
+    {n:"n_poi_educacao",ty:"int",nn:true,d:"POIs educação"},
+    {n:"n_poi_saude",ty:"int",nn:true,d:"POIs saúde"},
+    {n:"n_poi_total",ty:"int",nn:true,d:"POIs Overture rel≥1 no corredor (entra no score; não somar fontes)"},
+    {n:"densidade_poi_km",ty:"num",nn:true,d:"POIs/km"},
+    {n:"n_poi_total_prospeccao",ty:"int",nn:true,d:"união multi-fonte (prospecção; NÃO entra no score)"},
+    {n:"pct_arterial",ty:"num",nn:true,d:"% do trajeto em via de alto fluxo (exposição arterial)"},
+    {n:"classe_via_predom",ty:"text",nn:true,d:"classe de via predominante"},
+    {n:"pax_util",ty:"num",nn:true,d:"passageiros dia útil"},
+    {n:"pax_sab",ty:"num",nn:true,d:"passageiros sábado"},
+    {n:"pax_dom",ty:"num",nn:true,d:"passageiros domingo"},
+    {n:"e_pop_util",ty:"num",nn:true,d:"exposição população (componente)"},
+    {n:"e_pax_util",ty:"num",nn:true,d:"exposição passageiros (componente)"},
+    {n:"impressoes_util",ty:"num",nn:true,d:"impressões dia útil (ilustrativo)"},
+    {n:"impressoes_sab",ty:"num",nn:true,d:"impressões sábado"},
+    {n:"impressoes_dom",ty:"num",nn:true,d:"impressões domingo"},
+    {n:"impressoes_mes",ty:"num",nn:true,d:"impressões/mês"},
+    {n:"faixa_indicativa_pct",ty:"int",nn:true,d:"faixa indicativa ±35% (não é margem estatística)"},
+    {n:"s_impressoes",ty:"num",nn:true,d:"sub-score alcance/impressões"},
+    {n:"s_densidade",ty:"num",nn:true,d:"sub-score densidade"},
+    {n:"s_perfil",ty:"num",nn:true,d:"sub-score perfil (A5 recalibra)"},
+    {n:"s_arterial",ty:"num",nn:true,d:"sub-score exposição arterial"},
+    {n:"s_poi",ty:"num",nn:true,d:"sub-score POI"},
+    {n:"score_total",ty:"num",nn:true,d:"score 0–100 (combinação ponderada)"},
+    {n:"metodo_versao",ty:"text",nn:true,d:"versão do método"},
+    {n:"computed_at",ty:"timestamptz",nn:true,d:"quando calculado"}, V ]},
+  line_profile_demografico: { t:"core.line_profile_demografico", m:"distribuição A–E · 5", fields:[
+    {n:"line_id",ty:"text",fk:true,d:"→ line"},
+    {n:"classe_renda",ty:"char",nn:true,d:"classe A–E"},
+    {n:"pop",ty:"num",nn:true,d:"pop na classe"},
+    {n:"pct",ty:"num",nn:true,d:"% pop na classe"}, V ]},
+  line_demand_daily: { t:"core.line_demand_daily", m:"volume MCO · 8", fields:[
+    {n:"line_short_name",ty:"text",fk:true,d:"→ line.short_name"},
+    {n:"tipo_dia",ty:"int2",d:"1=útil 7=sáb 8=dom"},
+    {n:"n_dias",ty:"int",nn:true,d:"dias amostrados"},
+    {n:"n_viagens",ty:"int",nn:true,d:"viagens"},
+    {n:"total_usuarios",ty:"num",nn:true,d:"usuários (volume set/2025)"},
+    {n:"pax_por_dia",ty:"num",nn:true,d:"passageiros/dia"},
+    {n:"viagens_por_dia",ty:"num",nn:true,d:"viagens/dia"}, V ]},
+  line_boarding_profile: { t:"core.line_boarding_profile", m:"curva horária · 4", fields:[
+    {n:"line_short_name",ty:"text",fk:true,d:"→ line.short_name"},
+    {n:"faixa_horaria",ty:"int2",d:"0–23 h"},
+    {n:"share_embarque",ty:"num",nn:true,d:"share do embarque na faixa (distribuição mai/2024)"}, V ]},
+  h3_cell: { t:"core.h3_cell", m:"grid hexagonal · 8", note:"Superfície H3 res 9 (base do exposure_cell e do snap do consolidador).", fields:[
+    {n:"h3_index",ty:"text",pk:true,d:"índice H3 (res 9)"},
+    GEOM, GEOJSON,
+    {n:"pop",ty:"num",nn:true,d:"população do hex"},
+    {n:"renda_media",ty:"num",nn:true,d:"renda média"},
+    {n:"classe_predom",ty:"char",nn:true,d:"classe predominante"},
+    {n:"area_km2",ty:"num",nn:true,d:"área km²"}, V ]},
+  od_trip: { t:"core.od_trip", m:"matriz O-D tipada · 11", note:"Bilhetagem: cada viagem com origem/destino em hex. Base do unicos/reach.", fields:[
+    {n:"id",ty:"int8",pk:true,d:"PK"},
+    {n:"id_usuario",ty:"text",d:"id do cartão (dedup de reach)"},
+    {n:"tipo_cartao",ty:"text",nn:true,d:"tipo de cartão"},
+    {n:"data",ty:"date",d:"data da viagem"},
+    {n:"tipo_dia",ty:"int2",nn:true,d:"útil/sáb/dom"},
+    {n:"faixa_horaria",ty:"int2",nn:true,d:"faixa horária (origem)"},
+    {n:"h3_origem",ty:"text",fk:true,d:"→ h3_cell (origem)"},
+    {n:"h3_destino",ty:"text",fk:true,d:"→ h3_cell (destino)"},
+    {n:"geom_origem_31983",ty:"geometry",nn:true,d:"ponto de origem"},
+    {n:"geom_destino_31983",ty:"geometry",nn:true,d:"ponto de destino"}, V ]},
+  exposure_cell: { t:"core.exposure_cell", m:"H3 × hora · 9", note:"unicos_hora = DISTINCT usuários da OD por (hex,tipo_dia,faixa), origem-OU-destino. footfall = COUNT de POI no hex.", fields:[
+    {n:"h3_index",ty:"text",pk:true,fk:true,d:"→ h3_cell"},
+    {n:"tipo_dia",ty:"int2",pk:true,d:"útil/sáb/dom"},
+    {n:"faixa_horaria",ty:"int2",pk:true,d:"0–23"},
+    {n:"unicos_hora",ty:"int",d:"DISTINCT id_usuario da od_trip por (hex,tipo_dia,faixa); origem OU destino (D1)"},
+    {n:"pop",ty:"num",nn:true,d:"população do hex"},
+    {n:"renda_media",ty:"num",nn:true,d:"renda média"},
+    {n:"classe_predom",ty:"char",nn:true,d:"classe predominante"},
+    {n:"footfall",ty:"int",d:"COUNT de core.poi dentro do hex (proxy de atratividade)"}, V ]},
+  line_reach: { t:"core.line_reach", m:"audiência do corredor · 14", note:"ADR-058: rótulo = 'audiência do corredor', nunca 'alcance da linha'. metodo estimada|medida coexistem.", fields:[
+    {n:"id",ty:"int8",pk:true,d:"PK"},
+    {n:"line_id",ty:"text",fk:true,d:"→ line"},
+    {n:"grao",ty:"text",d:"diário | período"},
+    {n:"tipo_dia",ty:"int2",nn:true,d:"útil/sáb/dom"},
+    {n:"faixa_horaria",ty:"int2",nn:true,d:"faixa"},
+    {n:"reach_od",ty:"int",d:"DISTINCT usuários na UNIÃO das células (no período é união dos dias, nunca soma)"},
+    {n:"n_hexes",ty:"int",nn:true,d:"nº de hexes do corredor"},
+    {n:"buffer_corredor_m",ty:"num",nn:true,d:"buffer do corredor (m)"},
+    {n:"selo_confianca",ty:"text",d:"ALTO diário · MEDIO período-união · BAIXO expansão cega (ADR-058)"},
+    {n:"rotulo",ty:"text",d:"'audiência do corredor' (ADR-058)"},
+    {n:"metodo_versao",ty:"text",nn:true,d:"versão do método"},
+    {n:"computed_at",ty:"timestamptz",nn:true,d:"quando calculado"}, V,
+    {n:"metodo",ty:"text",d:"estimada (schedule) | medida (medido.viagem_hex) — RECAL-01"} ]},
+  face_reach: { t:"core.face_reach", m:"tríade por face/veículo · 11", note:"impressoes = SOMA (oportunidades); reach = DISTINCT na união (origem-OU-destino) ⇒ impressoes≥reach. Caveat ADR-058: audiência do corredor, não da face.", fields:[
+    {n:"id",ty:"int8",pk:true,d:"PK"},
+    {n:"vehicle_id",ty:"text",fk:true,d:"→ vehicle"},
+    {n:"vehicle_code",ty:"text",nn:true,d:"código do veículo (feed RT)"},
+    {n:"tipo_dia",ty:"int2",d:"útil/sáb/dom"},
+    {n:"n_hexes",ty:"int",nn:true,d:"hexes cobertos pela trajetória"},
+    {n:"impressoes",ty:"num",nn:true,d:"Σ exposure_cell.unicos sobre os (hex×faixa) cobertos — SOMA, não dedup (oportunidades de ver)"},
+    {n:"reach",ty:"num",nn:true,d:"DISTINCT usuários na UNIÃO das células cobertas (faixa-aware, origem-OU-destino)"},
+    {n:"frequencia",ty:"num",nn:true,d:"impressoes/reach"},
+    {n:"selo_confianca",ty:"text",d:"selo de honestidade (ADR-058)"},
+    {n:"metodo",ty:"text",d:"estimada | medida"}, V ]},
+  pattern_stop_exposure: { t:"core.pattern_stop_exposure", m:"velocidade real na parada · 6", note:"v_real = mediana de medido.parada_velocidade por (stop_id, faixa). MEDIDO (ADR-058).", fields:[
+    {n:"stop_id",ty:"text",pk:true,fk:true,d:"→ stop"},
+    {n:"faixa_horaria",ty:"int2",pk:true,d:"0–23"},
+    {n:"v_real",ty:"num",nn:true,d:"mediana de medido.parada_velocidade.v_real por (stop_id,faixa) — velocidade REAL medida"},
+    {n:"n_amostras",ty:"int",d:"nº de amostras"},
+    {n:"metodo",ty:"text",d:"medida"}, V ]}
+};
+window.E2L = { "j-line-met":"le-line-met","j-line-dem":"le-line-dem","j-stop-pse":"le-stop-pse","j-h3-exp":"le-h3-exp","j-exp-face":"le-exp-face","j-od-exp":"le-od-exp" };
+window.FLOWS = {
+  ident: { name:"Identidades — linha · ponto · trajeto",
+    edges:["j-line-shape","j-line-stop","j-tp-ps"],
+    nodes:["line","stop","line_shape","line_stop","trip_pattern","pattern_stop","vehicle"],
+    steps:["<b>line</b> (304) e <b>stop</b> (9.650, KNN≤50m) são as âncoras","<b>line_shape</b> (itinerário/dia) e <b>line_stop</b> (sequência) penduram em line_id","<b>trip_pattern</b>→<b>pattern_stop</b> alimentam o snap do RT (F2)"] },
+  score: { name:"Score — line_metrics puxa contexto + demanda",
+    edges:["j-line-met","j-line-dem"],
+    nodes:["line","line_metrics","line_profile_demografico","line_demand_daily","line_boarding_profile","census_sector","poi","road_segment"],
+    steps:["<b>line_metrics</b> (39 col) cruza corredor × <b>census_sector</b> (renda) × <b>poi</b> × <b>road_segment</b> (arterial)","<b>line_demand_daily</b> (MCO) e <b>line_boarding_profile</b> dão passageiros/curva horária","Score 0–100 vendável; impressões absolutas ilustrativas (coef. não calibrados)"] },
+  reach: { name:"Reach / F2 — OD → exposure → audiência",
+    edges:["j-h3-exp","j-od-exp","j-exp-face","j-exp-reach","j-poi-exp"],
+    nodes:["h3_cell","od_trip","exposure_cell","line_reach","face_reach","poi","pattern_stop_exposure"],
+    steps:["<b>od_trip</b> (bilhetagem) + <b>poi</b> alimentam <b>exposure_cell</b> (unicos_hora + footfall) sobre o <b>h3_cell</b>","<b>line_reach</b> (audiência do corredor) e <b>face_reach</b> (tríade impressão/reach/freq) derivam do exposure_cell","<b>pattern_stop_exposure.v_real</b> vem do schema medido (F2). metodo estimada|medida coexistem"] },
+  versao: { name:"Versionamento — version_id liga tudo",
+    edges:[],
+    nodes:["dataset_version","build_progress"],
+    steps:["<b>dataset_version</b> guarda BUILDING/ACTIVE/ARCHIVED (swap atômico)","Toda tabela tem <code>version_id</code> → o intel só lê a versão ACTIVE","<b>build_progress</b> dá resume por chave ao ChunkedBuild"] }
+};
+</script>
+<script src="../../_assets/diagram.js"></script>
+</body>
+</html>

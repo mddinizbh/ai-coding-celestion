@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>uai-ooh-intel — diagrama de classes</title>
+<script>
+  (function () {
+    const saved = localStorage.getItem('theme');
+    const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', dark);
+  })();
+</script>
+<link rel="stylesheet" href="../../_assets/diagram.css">
+</head>
+<body>
+
+<div class="bar">
+  <div>
+    <h1>uai-ooh-intel · classes</h1>
+    <div class="sub">Java 21 · hexagonal · com.uai.ooh.intel · 85 arquivos · read-only do serving</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="chips" id="chips">
+    <button class="chip on" data-flow="all">Tudo</button>
+    <button class="chip" data-flow="catalogo">Catálogo/ficha</button>
+    <button class="chip" data-flow="ranking">Ranking</button>
+    <button class="chip" data-flow="cesta">Cesta</button>
+    <button class="chip" data-flow="realtime">Realtime</button>
+    <button class="chip" data-flow="auth">Auth/introspect</button>
+  </div>
+  <button id="legendBtn">Legenda</button>
+  <a class="navlink" href="../../01-arquitetura-microservicos.html">← macro</a>
+  <button id="themeToggle">Tema</button>
+</div>
+
+<div class="legend" id="legend">
+  <h4>Tipo de classe</h4>
+  <div class="row"><span class="sw ext"></span> Adapter IN — controllers, filtros (driving)</div>
+  <div class="row"><span class="sw bus"></span> Port — interface (in/out, hexágono)</div>
+  <div class="row"><span class="sw svc"></span> Application — service / helper</div>
+  <div class="row"><span class="sw store"></span> Adapter OUT — JDBC/Redis/HTTP (driven)</div>
+  <div class="row"><span class="sw" style="background:var(--violet-soft);border-color:var(--violet)"></span> Domain — records / sealed</div>
+  <div class="hint">clique numa classe = <b>detalhe</b> · chips = <b>caminhos de caso de uso</b> · seta tracejada = <b>implements</b></div>
+</div>
+
+<div class="stage" id="stage">
+<svg viewBox="0 0 1400 1010" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Diagrama de classes do uai-ooh-intel">
+  <defs>
+    <marker id="a-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--muted)"/></marker>
+    <marker id="a-clay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--clay)"/></marker>
+  </defs>
+
+  <!-- ── lanes ─────────────────────────────── -->
+  <g class="zone"><rect x="24" y="92" width="214" height="712" rx="14"/><text class="ztitle" x="40" y="120">Adapter IN</text></g>
+  <g class="zone"><rect x="246" y="92" width="204" height="712" rx="14"/><text class="ztitle" x="262" y="120">Port IN</text></g>
+  <g class="zone"><rect x="460" y="92" width="250" height="712" rx="14"/><text class="ztitle" x="476" y="120">Application</text></g>
+  <g class="zone"><rect x="720" y="92" width="214" height="712" rx="14"/><text class="ztitle" x="736" y="120">Port OUT</text></g>
+  <g class="zone"><rect x="944" y="92" width="250" height="712" rx="14"/><text class="ztitle" x="960" y="120">Adapter OUT</text></g>
+  <g class="zone"><rect x="1204" y="92" width="172" height="712" rx="14"/><text class="ztitle" x="1220" y="120">Externo</text></g>
+  <g class="zone"><rect x="24" y="824" width="1352" height="172" rx="14"/><text class="ztitle" x="40" y="852">Domain · model (39 records + tipos sealed)</text></g>
+
+  <!-- ── edges ─────────────────────────────── -->
+  <path class="edge" id="e1"  d="M226,176 C 236,176 246,175 256,175"/>
+  <path class="edge impl" id="e2" d="M440,175 C 452,175 462,176 472,176"/>
+  <path class="edge" id="e3"  d="M698,176 C 710,175 720,174 730,173"/>
+  <path class="edge impl" id="e4" d="M924,173 C 936,173 946,175 956,175"/>
+  <path class="edge" id="e5"  d="M1182,175 C 1196,176 1206,180 1216,181"/>
+  <path class="edge" id="e7"  d="M924,419 C 940,360 945,280 940,234"/>
+  <path class="edge impl" id="e8" d="M924,233 C 936,233 946,237 956,238"/>
+  <path class="edge" id="e9"  d="M1182,238 C 1198,228 1206,200 1216,190"/>
+  <path class="edge" id="e10" d="M226,295 C 238,290 246,250 256,242"/>
+  <path class="edge impl" id="e11" d="M440,240 C 452,240 462,241 472,241"/>
+  <path class="edge" id="e12" d="M698,243 C 712,250 720,330 730,344"/>
+  <path class="edge impl" id="e13" d="M924,346 C 936,346 946,356 956,358"/>
+  <path class="edge" id="e14" d="M1182,358 C 1198,330 1206,280 1216,268"/>
+  <path class="edge dash" id="e15" d="M226,464 C 320,560 400,620 520,620 C 640,620 690,620 720,560 C 728,500 730,440 730,404"/>
+  <path class="edge impl" id="e16" d="M924,404 C 938,404 946,470 956,481"/>
+  <path class="edge" id="e17" d="M996,460 C 990,444 990,436 996,424"/>
+  <path class="edge" id="e18" d="M1182,422 C 1198,390 1206,360 1216,348"/>
+
+  <text class="elbl" id="l2"  x="446" y="168">impl</text>
+  <text class="elbl" id="l5"  x="1186" y="172">JDBC RO</text>
+  <text class="elbl" id="l14" x="1186" y="318">Redis</text>
+  <text class="elbl" id="l18" x="1186" y="402">HTTP</text>
+
+  <!-- ── Adapter IN ─────────────────────────── -->
+  <g class="node ext" data-k="c-lines"><rect x="36" y="148" width="190" height="56" rx="9"/><text class="t" x="52" y="174">LinesController</text><text class="m" x="52" y="192">/api/lines* (6 rotas)</text></g>
+  <g class="node ext" data-k="c-regions"><rect x="36" y="214" width="190" height="46" rx="9"/><text class="t" x="52" y="238">RegionsController</text><text class="m" x="52" y="254">/api/regions</text></g>
+  <g class="node ext" data-k="c-realtime"><rect x="36" y="270" width="190" height="50" rx="9"/><text class="t" x="52" y="294">RealtimeController</text><text class="m" x="52" y="310">/api/realtime/*</text></g>
+  <g class="node ext" data-k="c-exposure"><rect x="36" y="330" width="190" height="44" rx="9"/><text class="t" x="52" y="352">ExposureController</text><text class="m" x="52" y="367">camadas de exposição</text></g>
+  <g class="node ext" data-k="c-ping"><rect x="36" y="384" width="190" height="42" rx="9"/><text class="t" x="52" y="406">PingController</text><text class="m" x="52" y="420">/ping · /actuator</text></g>
+  <g class="node ext" data-k="f-bearer"><rect x="36" y="438" width="190" height="52" rx="9"/><text class="t" x="52" y="462">BearerTokenFilter</text><text class="m" x="52" y="480">valida Bearer (Spring)</text></g>
+  <g class="node ext" data-k="f-intkey"><rect x="36" y="500" width="190" height="50" rx="9"/><text class="t" x="52" y="524">InternalApiKeyFilter</text><text class="m" x="52" y="540">/internal/** · X-UAI-Key</text></g>
+  <g class="node ext" data-k="cfg-sec"><rect x="36" y="560" width="190" height="44" rx="9"/><text class="t" x="52" y="582">SecurityConfig</text><text class="m" x="52" y="597">cadeia de filtros</text></g>
+  <g class="node ext" data-k="cfg-openapi"><rect x="36" y="614" width="190" height="42" rx="9"/><text class="t" x="52" y="636">OpenApiConfig</text><text class="m" x="52" y="650">Swagger</text></g>
+
+  <!-- ── Port IN ─────────────────────────────── -->
+  <g class="node port" data-k="pi-net"><rect x="256" y="148" width="184" height="54" rx="9"/><text class="t" x="270" y="172" style="font-size:11.5px">QueryNetworkUseCase</text><text class="k" x="270" y="190">port in · rede</text></g>
+  <g class="node port" data-k="pi-rt"><rect x="256" y="214" width="184" height="50" rx="9"/><text class="t" x="270" y="236" style="font-size:11.5px">QueryRealtimeUseCase</text><text class="k" x="270" y="253">port in · realtime</text></g>
+  <g class="node port" data-k="pi-exp"><rect x="256" y="276" width="184" height="46" rx="9"/><text class="t" x="270" y="297" style="font-size:11.5px">QueryExposureUseCase</text><text class="k" x="270" y="313">port in · exposição</text></g>
+  <g class="node port" data-k="pi-ping"><rect x="256" y="334" width="184" height="44" rx="9"/><text class="t" x="270" y="355" style="font-size:11.5px">PingUseCase</text><text class="k" x="270" y="370">port in · ping</text></g>
+
+  <!-- ── Application ─────────────────────────── -->
+  <g class="node do" data-k="s-net"><rect x="472" y="148" width="226" height="56" rx="9"/><text class="t" x="488" y="173">NetworkQueryService</text><text class="m" x="488" y="191">catálogo · rank · cesta · geo</text></g>
+  <g class="node do" data-k="s-rt"><rect x="472" y="216" width="226" height="50" rx="9"/><text class="t" x="488" y="240">RealtimeQueryService</text><text class="m" x="488" y="256">posições · summary</text></g>
+  <g class="node do" data-k="s-exp"><rect x="472" y="278" width="226" height="44" rx="9"/><text class="t" x="488" y="300">ExposureQueryService</text><text class="m" x="488" y="315">superfícies de exposição</text></g>
+  <g class="node do" data-k="s-ping"><rect x="472" y="334" width="226" height="42" rx="9"/><text class="t" x="488" y="356">PingUseCaseImpl</text><text class="m" x="488" y="370">health</text></g>
+  <g class="node" data-k="h-ver"><rect x="472" y="392" width="226" height="54" rx="9"/><text class="t" x="488" y="416">ActiveVersionResolver</text><text class="m" x="488" y="434">cache ACTIVE · TTL 15s</text></g>
+  <g class="node" data-k="h-rank"><rect x="472" y="458" width="226" height="48" rx="9"/><text class="t" x="488" y="481">RankingCalculator</text><text class="m" x="488" y="497">re-rank 5 sub-scores</text></g>
+  <g class="node" data-k="h-agg"><rect x="472" y="518" width="226" height="48" rx="9"/><text class="t" x="488" y="541">AggregationCalculator</text><text class="m" x="488" y="557">cesta · OTS + perfil</text></g>
+
+  <!-- ── Port OUT ────────────────────────────── -->
+  <g class="node port" data-k="po-net"><rect x="730" y="148" width="194" height="50" rx="9"/><text class="t" x="744" y="170" style="font-size:11px">NetworkQueryRepository</text><text class="k" x="744" y="187">port out</text></g>
+  <g class="node port" data-k="po-ver"><rect x="730" y="210" width="194" height="46" rx="9"/><text class="t" x="744" y="231" style="font-size:11px">DatasetVersionRepository</text><text class="k" x="744" y="247">port out</text></g>
+  <g class="node port" data-k="po-exp"><rect x="730" y="268" width="194" height="44" rx="9"/><text class="t" x="744" y="289" style="font-size:11px">ExposureSurfaceRepository</text><text class="k" x="744" y="304">port out</text></g>
+  <g class="node port" data-k="po-feed"><rect x="730" y="324" width="194" height="44" rx="9"/><text class="t" x="744" y="345" style="font-size:11px">PositionFeed</text><text class="k" x="744" y="360">port out · Redis</text></g>
+  <g class="node port" data-k="po-intro"><rect x="730" y="380" width="194" height="46" rx="9"/><text class="t" x="744" y="401" style="font-size:11px">TokenIntrospector</text><text class="k" x="744" y="417">port out · token</text></g>
+
+  <!-- ── Adapter OUT ─────────────────────────── -->
+  <g class="node store" data-k="o-jdbcnet"><rect x="956" y="148" width="226" height="54" rx="9"/><text class="t" x="972" y="173">JdbcNetworkQueryRepo</text><text class="m" x="972" y="191">SELECT serving (sem ST_*)</text></g>
+  <g class="node store" data-k="o-jdbcver"><rect x="956" y="214" width="226" height="48" rx="9"/><text class="t" x="972" y="237">JdbcDatasetVersionRepo</text><text class="m" x="972" y="253">serving.dataset_version</text></g>
+  <g class="node store" data-k="o-jdbcexp"><rect x="956" y="274" width="226" height="46" rx="9"/><text class="t" x="972" y="296">JdbcExposureSurfaceRepo</text><text class="m" x="972" y="311">camadas serving</text></g>
+  <g class="node store" data-k="o-redis"><rect x="956" y="332" width="226" height="54" rx="9"/><text class="t" x="972" y="357">RedisPositionFeed</text><text class="m" x="972" y="375">lê live:{} (CONS-05)</text></g>
+  <g class="node store" data-k="o-introauth"><rect x="956" y="398" width="226" height="50" rx="9"/><text class="t" x="972" y="422">UaiAuthTokenIntrospector</text><text class="m" x="972" y="438">POST /introspect</text></g>
+  <g class="node store" data-k="o-introcache"><rect x="956" y="460" width="226" height="46" rx="9"/><text class="t" x="972" y="482">CachingTokenIntrospector</text><text class="m" x="972" y="497">cache PT60S</text></g>
+  <g class="node store" data-k="o-introstub"><rect x="956" y="518" width="226" height="42" rx="9"/><text class="t" x="972" y="540">StubTokenIntrospector</text><text class="m" x="972" y="554">dev</text></g>
+
+  <!-- ── Externo ─────────────────────────────── -->
+  <g class="node store" data-k="x-serving"><rect x="1216" y="148" width="156" height="66" rx="9"/><text class="t" x="1230" y="174">serving</text><text class="m" x="1230" y="192">ACTIVE · ooh_intel_ro</text><text class="m" x="1230" y="207">PostGIS (sem ST_*)</text></g>
+  <g class="node store" data-k="x-redis"><rect x="1216" y="238" width="156" height="56" rx="9"/><text class="t" x="1230" y="263">Redis</text><text class="m" x="1230" y="281">live:{} (consolidador)</text></g>
+  <g class="node ext" data-k="x-auth"><rect x="1216" y="318" width="156" height="58" rx="9"/><text class="t" x="1230" y="344">uai-auth</text><text class="m" x="1230" y="362">introspection</text></g>
+
+  <!-- ── Domain ──────────────────────────────── -->
+  <g class="node domain" data-k="m-cat"><rect x="36" y="878" width="330" height="100" rx="9"/><text class="t" x="52" y="903">catálogo / ficha</text><text class="m" x="52" y="922">Line · LineRanking · LineMetrics</text><text class="m" x="52" y="939">LineDetail · LineGeo · LineFilter</text><text class="m" x="52" y="956">AggregateResult · Region</text></g>
+  <g class="node domain" data-k="m-rt"><rect x="386" y="878" width="300" height="100" rx="9"/><text class="t" x="402" y="903">realtime</text><text class="m" x="402" y="922">LivePosition · DailySummary</text><text class="m" x="402" y="939">VehicleScope · LineScope</text><text class="m" x="402" y="956">RealtimeScope · StopFeature</text></g>
+  <g class="node domain" data-k="m-sealed"><rect x="706" y="878" width="320" height="100" rx="9"/><text class="t" x="722" y="903">sealed / enums</text><text class="m" x="722" y="922">HealthState (Up·Degraded·Down)</text><text class="m" x="722" y="939">ExposureLayer · ClasseRenda</text><text class="m" x="722" y="956">PublicoAlvo (AB · DE)</text></g>
+  <g class="node domain" data-k="m-misc"><rect x="1046" y="878" width="314" height="100" rx="9"/><text class="t" x="1062" y="903">métricas / pesos</text><text class="m" x="1062" y="922">ScoreWeights · DemographicProfile</text><text class="m" x="1062" y="939">Arterial · Reach · Impressions</text><text class="m" x="1062" y="956">Demand · DatasetVersion</text></g>
+</svg>
+
+  <div class="src">uai-ooh-intel · com.uai.ooh.intel · jun/2026</div>
+
+  <div class="card" id="flowcap"><div class="fname" id="f-name"></div><ol id="f-steps"></ol></div>
+  <div class="card" id="detail">
+    <h3 id="d-title">Clique numa classe</h3>
+    <div class="meta" id="d-meta">papel + métodos</div>
+    <p id="d-body">Diagrama de classes hexagonal: <b>Adapter IN</b> (controllers) → <b>Port IN</b> → <b>Application</b> → <b>Port OUT</b> → <b>Adapter OUT</b> → <b>Externo</b>. Domain (records/sealed) embaixo. Chips acendem os caminhos de caso de uso.</p>
+  </div>
+</div>
+
+<script>
+window.DETAIL = {
+  "c-lines": { t:"LinesController", m:"adapter in · @RestController", b:"Expõe <code>/api/lines</code> (catálogo), <code>/ranking</code> (re-rank), <code>/{id}</code> (ficha), <code>/{id}/metrics</code>, <code>/{id}/geo</code> (GeoJSON) e <code>POST /aggregate</code> (cesta). Delega ao <b>QueryNetworkUseCase</b>; mapeia <code>LineNotFoundException</code>→404." },
+  "c-regions": { t:"RegionsController", m:"adapter in", b:"<code>/api/regions</code> — cascata região→bairro para os filtros geográficos." },
+  "c-realtime": { t:"RealtimeController", m:"adapter in · F2", b:"<code>/api/realtime/positions</code> e <code>/summary</code> — posição/progresso ao vivo de um conjunto de <code>vehicle_id</code> (server-derived). Delega ao <b>QueryRealtimeUseCase</b>." },
+  "c-exposure": { t:"ExposureController", m:"adapter in", b:"Leitura das camadas de exposição (superfícies pré-computadas no serving)." },
+  "c-ping": { t:"PingController", m:"adapter in", b:"<code>/ping</code> e o health compósito (db + datasetVersion ACTIVE)." },
+  "f-bearer": { t:"BearerTokenAuthenticationFilter", m:"adapter in · segurança", b:"Extrai o Bearer e valida via <b>TokenIntrospector</b> (introspection no uai-auth). Em dev usa o stub." },
+  "f-intkey": { t:"InternalApiKeyFilter", m:"adapter in · segurança", b:"Protege <code>/internal/**</code> com <code>X-UAI-Internal-Key</code> (fail-safe: 401 se ausente/divergente)." },
+  "cfg-sec": { t:"SecurityConfig", m:"config", b:"Monta a cadeia de filtros do Spring Security (Bearer + internal key + CORS)." },
+  "cfg-openapi": { t:"OpenApiConfig", m:"config", b:"Swagger/OpenAPI." },
+  "pi-net": { t:"QueryNetworkUseCase", m:"port in · interface", b:"Contrato do produto: <code>listLines</code>, <code>lineDetail</code>, <code>lineMetrics</code>, <code>lineGeo</code>, <code>rankLines(weights,publicoAlvo)</code>, <code>aggregate(ids)</code>, <code>listRegions</code>. Implementado por <b>NetworkQueryService</b>." },
+  "pi-rt": { t:"QueryRealtimeUseCase", m:"port in · interface", b:"<code>positions(scope)</code> e <code>summary(scope)</code>. Implementado por <b>RealtimeQueryService</b>." },
+  "pi-exp": { t:"QueryExposureUseCase", m:"port in · interface", b:"Leitura das camadas de exposição. Implementado por <b>ExposureQueryService</b>." },
+  "pi-ping": { t:"PingUseCase", m:"port in · interface", b:"Health/ping. Implementado por <b>PingUseCaseImpl</b>." },
+  "s-net": { t:"NetworkQueryService", m:"application · impl", b:"Implementa <b>QueryNetworkUseCase</b>. Resolve a versão ACTIVE (<b>ActiveVersionResolver</b>), lê via <b>NetworkQueryRepository</b>, e aplica <b>RankingCalculator</b> (re-rank) e <b>AggregationCalculator</b> (cesta) em memória." },
+  "s-rt": { t:"RealtimeQueryService", m:"application · impl", b:"Implementa <b>QueryRealtimeUseCase</b>. Lê o estado ao vivo via <b>PositionFeed</b> (Redis). Conjunto de <code>vehicle_id</code> sempre server-derived." },
+  "s-exp": { t:"ExposureQueryService", m:"application · impl", b:"Implementa <b>QueryExposureUseCase</b> sobre as superfícies de exposição do serving." },
+  "s-ping": { t:"PingUseCaseImpl", m:"application · impl", b:"Health compósito (db + datasetVersion + ping)." },
+  "h-ver": { t:"ActiveVersionResolver", m:"application · cache", b:"Cacheia o <code>dataset_version</code> <b>ACTIVE</b> (TTL ~15s). <code>current()</code> falha-rápido se não houver ACTIVE; <code>invalidate()</code> força refresh. Consumido por todos os reads via <b>DatasetVersionRepository</b>." },
+  "h-rank": { t:"RankingCalculator", m:"application · helper", b:"Re-rank in-memory dos 5 sub-scores por pesos/público-alvo (AB|DE) — sem ida ao banco." },
+  "h-agg": { t:"AggregationCalculator", m:"application · helper", b:"Combina a cesta (soma de OTS + perfil ponderado) — stateless." },
+  "po-net": { t:"NetworkQueryRepository", m:"port out · interface", b:"Leitura do dataset ACTIVE: linhas, ficha, métricas, geo, ranking, aggregate, regiões. Implementado por <b>JdbcNetworkQueryRepository</b>." },
+  "po-ver": { t:"DatasetVersionRepository", m:"port out · interface", b:"<code>findActive()</code> → <b>JdbcDatasetVersionRepository</b>." },
+  "po-exp": { t:"ExposureSurfaceRepository", m:"port out · interface", b:"Camadas de exposição pré-computadas. Implementado por <b>JdbcExposureSurfaceRepository</b>." },
+  "po-feed": { t:"PositionFeed", m:"port out · interface", b:"Estado ao vivo (posições/acumulado). Implementado por <b>RedisPositionFeed</b>." },
+  "po-intro": { t:"TokenIntrospector", m:"port out · interface", b:"Valida token. Impls: <b>UaiAuth</b> (HTTP), <b>Caching</b> (wrapper) e <b>Stub</b> (dev)." },
+  "o-jdbcnet": { t:"JdbcNetworkQueryRepository", m:"adapter out · JdbcTemplate", b:"SELECT plano no schema <code>serving</code> (sem <code>ST_*</code> — ADR-003), escopado à versão ACTIVE." },
+  "o-jdbcver": { t:"JdbcDatasetVersionRepository", m:"adapter out · JdbcTemplate", b:"Lê <code>serving.dataset_version</code> para resolver o ACTIVE." },
+  "o-jdbcexp": { t:"JdbcExposureSurfaceRepository", m:"adapter out · JdbcTemplate", b:"Lê as camadas de exposição materializadas no serving." },
+  "o-redis": { t:"RedisPositionFeed", m:"adapter out · Redis", b:"Lê o contrato <code>live:{}</code> escrito pelo trip-consolidator (CONS-05) — só leitura." },
+  "o-introauth": { t:"UaiAuthTokenIntrospector", m:"adapter out · HTTP", b:"<code>POST /introspect</code> no uai-auth com <code>X-UAI-Internal-Key</code> (fail-closed)." },
+  "o-introcache": { t:"CachingTokenIntrospector", m:"adapter out · decorator", b:"Cacheia a introspection (PT60S) por cima do <b>UaiAuthTokenIntrospector</b>." },
+  "o-introstub": { t:"StubTokenIntrospector", m:"adapter out · dev", b:"Sempre válido — só dev/test." },
+  "x-serving": { t:"schema serving", m:"externo · PostGIS", b:"Tabelas planas (GeoJSON), versão ACTIVE, role read-only <code>ooh_intel_ro</code>. Ver Nível 2 (dados)." },
+  "x-redis": { t:"Redis", m:"externo · estado ao vivo", b:"<code>live:{vehicle}</code>/<code>live:line</code>/HLL escritos pelo consolidador. Ver Nível 3." },
+  "x-auth": { t:"uai-auth", m:"externo · identidade", b:"Introspection de token (RFC 7662)." },
+  "m-cat": { t:"Domain · catálogo/ficha", m:"records", b:"<code>Line</code>, <code>LineRanking</code>, <code>LineMetrics</code>, <code>LineDetail</code>, <code>LineGeo</code>, <code>LineFilter</code>, <code>AggregateResult</code>, <code>Region</code> — value objects puros do produto." },
+  "m-rt": { t:"Domain · realtime", m:"records", b:"<code>LivePosition</code>, <code>DailySummary</code>, <code>VehicleScope</code>, <code>LineScope</code>, <code>RealtimeScope</code>, <code>StopFeature</code>." },
+  "m-sealed": { t:"Domain · sealed/enums", m:"tipos finitos", b:"<code>HealthState</code> (Up | Degraded | Down), <code>ExposureLayer</code>, <code>ClasseRenda</code>, <code>PublicoAlvo</code> (AB|DE) — sealed sem default (RULE-JAVA-02)." },
+  "m-misc": { t:"Domain · métricas/pesos", m:"records", b:"<code>ScoreWeights</code>, <code>DemographicProfile</code>, <code>Arterial</code>, <code>Reach</code>, <code>Impressions</code>, <code>Demand</code>, <code>DatasetVersion</code>." }
+};
+window.E2L = { "e2":"l2","e5":"l5","e14":"l14","e18":"l18" };
+window.FLOWS = {
+  catalogo: { name:"Catálogo / ficha — leitura do serving ACTIVE",
+    edges:["e1","e2","e3","e4","e5","e7","e8","e9"],
+    nodes:["c-lines","pi-net","s-net","h-ver","po-net","po-ver","o-jdbcnet","o-jdbcver","x-serving","m-cat"],
+    steps:["<code>GET /api/lines/{id}</code> → <b>QueryNetworkUseCase</b> → <b>NetworkQueryService</b>","<b>ActiveVersionResolver</b> resolve a versão ACTIVE; lê via <b>NetworkQueryRepository</b>","<b>JdbcNetworkQueryRepository</b> faz SELECT plano no <code>serving</code> (sem ST_*)"] },
+  ranking: { name:"Ranking — re-rank in-memory por pesos",
+    edges:["e1","e2","e3","e4","e5"],
+    nodes:["c-lines","pi-net","s-net","h-rank","po-net","o-jdbcnet","x-serving","m-cat"],
+    steps:["<code>GET /api/lines/ranking?weights=…</code> (público-alvo AB|DE)","<b>NetworkQueryService</b> aplica o <b>RankingCalculator</b> sobre os 5 sub-scores","Sub-scores já vêm min-max do serving — re-rank é em memória, sem novo SELECT pesado"] },
+  cesta: { name:"Cesta — agregação de linhas",
+    edges:["e1","e2","e3","e4","e5"],
+    nodes:["c-lines","pi-net","s-net","h-agg","po-net","o-jdbcnet","x-serving","m-cat"],
+    steps:["<code>POST /api/lines/aggregate</code> com os ids da cesta","<b>AggregationCalculator</b> soma OTS e pondera o perfil","Retorna <code>AggregateResult</code> (figuras combinadas + métricas por linha)"] },
+  realtime: { name:"Realtime — posições ao vivo (lê o Redis)",
+    edges:["e10","e11","e12","e13","e14"],
+    nodes:["c-realtime","pi-rt","s-rt","po-feed","o-redis","x-redis","m-rt"],
+    steps:["<code>GET /api/realtime/positions</code> (conjunto de vehicle_id server-derived)","<b>RealtimeQueryService</b> → <b>PositionFeed</b> → <b>RedisPositionFeed</b>","Lê o contrato <code>live:{}</code> escrito pelo consolidador (CONS-05). Ver Nível 3"] },
+  auth: { name:"Auth — introspection no uai-auth",
+    edges:["e15","e16","e17","e18"],
+    nodes:["f-bearer","po-intro","o-introcache","o-introauth","x-auth"],
+    steps:["<b>BearerTokenAuthenticationFilter</b> chama o <b>TokenIntrospector</b>","<b>CachingTokenIntrospector</b> (PT60S) por cima do <b>UaiAuthTokenIntrospector</b>","<code>POST /introspect</code> no uai-auth (X-UAI-Internal-Key, fail-closed)"] }
+};
+</script>
+<script src="../../_assets/diagram.js"></script>
+</body>
+</html>

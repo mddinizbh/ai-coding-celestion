@@ -1,0 +1,11 @@
+-- Schema de pipeline para ai-dev-agents (Fase 2)
+-- Este arquivo sera usado pelo /db-setup para criar as tabelas
+-- de persistencia do pipeline de agentes.
+--
+-- TODO: Implementar na Fase 2
+--
+-- Tabelas planejadas:
+-- - agent_tasks: tasks do planner com status
+-- - agent_handoffs: outputs dos agentes (coder, reviewer, tester)
+-- - agent_history: log de eventos do orchestrator
+-- - agent_migrations: controle de migrations do pipeline

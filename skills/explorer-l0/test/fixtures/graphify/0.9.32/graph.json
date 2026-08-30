@@ -1,0 +1,91 @@
+{
+  "nodes": [
+    {
+      "id": "main",
+      "label": "main.go",
+      "file_type": "code",
+      "source_file": "main.go",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "project_greeter",
+      "label": "Greeter",
+      "file_type": "code",
+      "source_file": "main.go",
+      "source_location": "L6",
+      "_origin": "ast"
+    },
+    {
+      "id": "project_greeter_greet",
+      "label": ".Greet()",
+      "file_type": "code",
+      "source_file": "main.go",
+      "source_location": "L11",
+      "_origin": "ast"
+    },
+    {
+      "id": "main_main",
+      "label": "main()",
+      "file_type": "code",
+      "source_file": "main.go",
+      "source_location": "L15",
+      "_origin": "ast"
+    }
+  ],
+  "edges": [
+    {
+      "source": "main",
+      "target": "go_pkg_fmt",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "main.go",
+      "source_location": "L3",
+      "weight": 1.0,
+      "context": "import",
+      "_origin": "ast"
+    },
+    {
+      "source": "main",
+      "target": "project_greeter",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "main.go",
+      "source_location": "L6",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "project_greeter",
+      "target": "project_greeter_greet",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "main.go",
+      "source_location": "L11",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "main",
+      "target": "main_main",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "main.go",
+      "source_location": "L15",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "main_main",
+      "target": "project_greeter_greet",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "main.go",
+      "source_location": "L17",
+      "weight": 1.0,
+      "_origin": "ast"
+    }
+  ],
+  "hyperedges": []
+}

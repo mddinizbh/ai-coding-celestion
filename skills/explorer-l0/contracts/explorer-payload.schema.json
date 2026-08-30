@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-coding-celestion.local/skills/explorer-l0/contracts/explorer-payload.schema.json",
+  "title": "Descobrir Explorer Semantic Payload",
+  "description": "Skill-local closed contract for one untrusted Explorer payload over a single deterministic chunk. The Explorer is the only stochastic stage and is confined to semantics: it references stable opaque chunk/node/edge keys and supplies type, natural_key, name, summary, and bounded attributes. It must never supply authority owned by deterministic prepare/finalize: canonical ids, hashes, artifact manifest, coverage, status, acceptance, source_engine, evidence, repository/source paths. Every object is closed (additionalProperties:false) so any smuggled authority or prompt-injection-shaped field is rejected structurally. Merge, canonical ids, graph hash, coverage, verification and status promotion are all downstream and deterministic.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["chunk_key", "records", "relations"],
+  "properties": {
+    "chunk_key": {
+      "$ref": "#/$defs/opaqueKey",
+      "description": "Stable opaque identifier of the deterministic chunk this payload interprets. Assigned by prepare, never by the Explorer."
+    },
+    "records": {
+      "type": "array",
+      "description": "Semantic interpretations of graph nodes in this chunk. Never carries canonical ids, status, evidence, or source_engine.",
+      "items": { "$ref": "#/$defs/record" }
+    },
+    "relations": {
+      "type": "array",
+      "description": "Relation intents between records. Endpoints are named by (type, natural_key); canonical endpoint ids are recomputed downstream.",
+      "items": { "$ref": "#/$defs/relation" }
+    }
+  },
+  "$defs": {
+    "opaqueKey": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$",
+      "description": "Bounded opaque token (chunk/node/edge). Forbids slash, backslash, dot and whitespace so it can never carry a source path or repository reference."
+    },
+    "semanticName": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\x00-\\x1f/\\\\][^\\x00-\\x1f]{0,255}$",
+      "description": "Single-line semantic token (type, name, relation_type). No control characters, no leading slash, no backslash."
+    },
+    "naturalKey": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\.\\.)[^\\x00-\\x1f\\\\][^\\x00-\\x1f]{0,255}$",
+      "description": "Semantic natural key. May contain ':' and '/' (e.g. get:/billing) but rejects a leading slash, '..' traversal, backslash and control characters, so it cannot be an absolute path."
+    },
+    "summary": {
+      "type": "string",
+      "pattern": "^[^\\x00-\\x1f]{0,512}$",
+      "description": "Short single-line factual summary. May be empty. No control characters or newlines."
+    },
+    "attributeValue": {
+      "type": ["string", "number", "boolean"],
+      "description": "Bounded scalar attribute value. Nested objects and arrays are rejected so authority structures cannot be smuggled through attributes."
+    },
+    "attributes": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$"
+      },
+      "additionalProperties": { "$ref": "#/$defs/attributeValue" },
+      "description": "Open map of bounded scalar semantic attributes. Keys are snake/dotted tokens; values are scalars only."
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_key", "type", "natural_key", "name", "summary", "attributes"],
+      "properties": {
+        "node_key": {
+          "$ref": "#/$defs/opaqueKey",
+          "description": "Opaque reference to the deterministic graph node this record interprets."
+        },
+        "type": { "$ref": "#/$defs/semanticName" },
+        "natural_key": { "$ref": "#/$defs/naturalKey" },
+        "name": { "$ref": "#/$defs/semanticName" },
+        "summary": { "$ref": "#/$defs/summary" },
+        "attributes": { "$ref": "#/$defs/attributes" }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "edge_key",
+        "relation_type",
+        "from_type",
+        "from_natural_key",
+        "to_type",
+        "to_natural_key"
+      ],
+      "properties": {
+        "edge_key": {
+          "$ref": "#/$defs/opaqueKey",
+          "description": "Opaque reference to the deterministic graph edge this relation interprets."
+        },
+        "relation_type": { "$ref": "#/$defs/semanticName" },
+        "from_type": { "$ref": "#/$defs/semanticName" },
+        "from_natural_key": { "$ref": "#/$defs/naturalKey" },
+        "to_type": { "$ref": "#/$defs/semanticName" },
+        "to_natural_key": { "$ref": "#/$defs/naturalKey" }
+      }
+    }
+  }
+}

@@ -19,7 +19,7 @@ const pkgRoot = join(here, "..");
 const repoSkills = join(pkgRoot, "..", "..", "skills");
 const destRoot = join(pkgRoot, "skills");
 
-const NAMES = ["explorer-l0", "explorer-l1", "explorer-l2", "explorer-query"];
+const NAMES = ["explorer-l0", "explorer-l1", "explorer-l2", "explorer-query", "explorer-ops", "explorer-audit"];
 
 if (!existsSync(join(repoSkills, "explorer-l0"))) {
   console.error(`sync-skills: harness skills not found at ${repoSkills}`);
@@ -40,6 +40,15 @@ for (const name of NAMES) {
     filter: (p) => !p.includes(`${name}/test`) && !p.includes(`${name}/e2e`),
   });
   console.log(`synced ${name}`);
+}
+
+// also sync agent command markdowns (canonical sources for /explorer-indexer and /explorer-auditor) so packaged tarball includes every referenced source
+for (const f of ["explorer-indexer.md", "explorer-auditor.md"]) {
+  const src = join(pkgRoot, "..", "..", "agents", "opencode", "commands", f);
+  if (existsSync(src)) {
+    cpSync(src, join(destRoot, f));
+    console.log(`synced command source ${f}`);
+  }
 }
 
 writeFileSync(

@@ -1,10 +1,12 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveSkillsRoot } from "./resolve-skills-root.mjs";
 import {
   installSimpleSkill,
   uninstallSimpleSkill,
+  statusSimpleSkill,
+  statusCommand,
   MARKER,
 } from "./simple-skill-install.mjs";
 import { runDeps } from "./install-deps.mjs";
@@ -63,6 +65,20 @@ Prefer this over broad repo grep.
 }
 
 /**
+ * Locate canonical command markdown (supports packaged flat copy, per-skill commands/, and monorepo agents/ layout).
+ * No machine-specific paths.
+ */
+function findCommandSource(root, cmdName) {
+  const flat = join(root, cmdName);
+  if (existsSync(flat)) return flat;
+  const skillCmd = join(root, cmdName.replace(".md", ""), "commands", cmdName);
+  if (existsSync(skillCmd)) return skillCmd;
+  const monoAgent = join(root, "..", "agents", "opencode", "commands", cmdName);
+  if (existsSync(monoAgent)) return monoAgent;
+  throw new Error(`canonical command markdown not found for ${cmdName}`);
+}
+
+/**
  * @param {"install"|"status"|"uninstall"} action
  */
 export async function runAll(action) {
@@ -86,6 +102,30 @@ export async function runAll(action) {
       join(root, "explorer-query"),
       { commandName: "explorer-query.md", commandBody: queryCommand() },
     );
+    // explorer-ops and explorer-audit skills + their commands from canonical
+    const opsBody = readFileSync(findCommandSource(root, "explorer-ops.md"), "utf8");
+    out.explorer_ops = installSimpleSkill(
+      "explorer-ops",
+      join(root, "explorer-ops"),
+      { commandName: "explorer-ops.md", commandBody: opsBody },
+    );
+    const auditBody = readFileSync(findCommandSource(root, "explorer-audit.md"), "utf8");
+    out.explorer_audit = installSimpleSkill(
+      "explorer-audit",
+      join(root, "explorer-audit"),
+      { commandName: "explorer-audit.md", commandBody: auditBody },
+    );
+    // agent commands for indexer/auditor (command-only via same atomic+marker)
+    const idxBody = readFileSync(findCommandSource(root, "explorer-indexer.md"), "utf8");
+    out.explorer_indexer = installSimpleSkill(null, null, {
+      commandName: "explorer-indexer.md",
+      commandBody: idxBody,
+    });
+    const audBody = readFileSync(findCommandSource(root, "explorer-auditor.md"), "utf8");
+    out.explorer_auditor = installSimpleSkill(null, null, {
+      commandName: "explorer-auditor.md",
+      commandBody: audBody,
+    });
     // Own complementary skills — symlink only, no command file (best effort).
     out.own_extra = {};
     for (const name of [
@@ -113,6 +153,33 @@ export async function runAll(action) {
   if (action === "status") {
     out.explorer_l0 = await runSkillInstaller(root, "explorer-l0", "status");
     out.explorer_l1 = await runSkillInstaller(root, "explorer-l1", "status");
+    // truthful probes (marker for cmds; exact source match for symlinks)
+    const opsSrc = join(root, "explorer-ops");
+    const opsSkill = statusSimpleSkill("explorer-ops", opsSrc);
+    const opsCmd = statusCommand("explorer-ops.md");
+    out.explorer_ops = {
+      present: opsSkill.present || opsCmd.present,
+      owned: !!(opsSkill.owned && opsCmd.owned),
+      skill_present: opsSkill.present,
+      skill_owned: opsSkill.owned,
+      command_present: opsCmd.present,
+      command_owned: opsCmd.owned,
+      skill_source: opsSrc,
+    };
+    const auditSrc = join(root, "explorer-audit");
+    const auditSkill = statusSimpleSkill("explorer-audit", auditSrc);
+    const auditCmd = statusCommand("explorer-audit.md");
+    out.explorer_audit = {
+      present: auditSkill.present || auditCmd.present,
+      owned: !!(auditSkill.owned && auditCmd.owned),
+      skill_present: auditSkill.present,
+      skill_owned: auditSkill.owned,
+      command_present: auditCmd.present,
+      command_owned: auditCmd.owned,
+      skill_source: auditSrc,
+    };
+    out.explorer_indexer = statusCommand("explorer-indexer.md");
+    out.explorer_auditor = statusCommand("explorer-auditor.md");
     out.deps = await runDeps("status");
     out.ok = true;
     return out;
@@ -121,11 +188,16 @@ export async function runAll(action) {
   if (action === "uninstall") {
     out.explorer_l0 = await runSkillInstaller(root, "explorer-l0", "uninstall");
     out.explorer_l1 = await runSkillInstaller(root, "explorer-l1", "uninstall");
-    out.explorer_l2 = uninstallSimpleSkill("explorer-l2", "explorer-l2.md");
-    out.explorer_query = uninstallSimpleSkill(
-      "explorer-query",
-      "explorer-query.md",
-    );
+    const l2Src = join(root, "explorer-l2");
+    const qSrc = join(root, "explorer-query");
+    out.explorer_l2 = uninstallSimpleSkill("explorer-l2", "explorer-l2.md", l2Src);
+    out.explorer_query = uninstallSimpleSkill("explorer-query", "explorer-query.md", qSrc);
+    const opsSrc = join(root, "explorer-ops");
+    const auditSrc = join(root, "explorer-audit");
+    out.explorer_ops = uninstallSimpleSkill("explorer-ops", "explorer-ops.md", opsSrc);
+    out.explorer_audit = uninstallSimpleSkill("explorer-audit", "explorer-audit.md", auditSrc);
+    out.explorer_indexer = uninstallSimpleSkill(null, "explorer-indexer.md");
+    out.explorer_auditor = uninstallSimpleSkill(null, "explorer-auditor.md");
     out.deps = await runDeps("uninstall");
     out.ok = true;
     return out;

@@ -17,7 +17,7 @@ aprovação humana explícita (Human Gate).
 | Papel | Confiança | Função |
 |---|---|---|
 | Graphify | Determinístico | Extração estrutural em worktree isolada da revisão pinada. Invocado pela skill, nunca à mão. |
-| Explorer (LLM) | **Untrusted / estocástico** | Enriquecimento semântico por chunk. Só emite natural keys; nunca IDs, status ou evidência. |
+| `emit-payloads` | Determinístico | Fatos Graphify → payload fechado (mapa global de nós). LLM não entra no hot path. |
 | Guardrails (`finalize`) | Determinístico | Valida shape, recompute IDs canônicos, hash, cobertura, downgrade de status. |
 | Store SQLite | Canônico | Candidates + 1 ponteiro de baseline aceito por `(namespace, logical_repo)`. JSON é só export. |
 
@@ -25,7 +25,7 @@ aprovação humana explícita (Human Gate).
 
 1. **setup-status** — verifica `graphifyy==0.9.32` via uv. Faltou? para e instrui.
 2. **prepare** — worktree efêmera + extração + chunk index + Artifact Manifest. Repo-fonte nunca é mutado (snapshot pre/post obrigatório).
-3. **dispatch** — 1 subagente por chunk; payload fechado; retry ≤3 por chunk.
+3. **emit-payloads** — encoder mecânico: fatos Graphify → payload fechado (um processo, todos os chunks). LLM não entra no hot path do L0.
 4. **finalize** — valida, funde payloads, re-deriva evidência/IDs/hash/cobertura via leitor Git pinado, persiste idempotente. Bloqueio = nada escrito.
 
 ## Semântica de status

@@ -15,6 +15,8 @@ import {
   GraphifyProjectionError,
   chunkGraphifyFacts,
   chunkOpaqueKey,
+  locatorCoverage,
+  orderFactsNodeCentric,
   edgeOpaqueKey,
   nodeOpaqueKey,
   projectGraphifyFacts,
@@ -275,5 +277,76 @@ describe("chunkGraphifyFacts — deterministic bounds", () => {
     assert.equal(p.facts.length, 0);
     assert.equal(p.jsonl, "");
     assert.equal(p.chunks.length, 0);
+  });
+});
+
+describe("orderFactsNodeCentric — outgoing edges follow their source node", () => {
+  test("an edge shares a chunk with its source node when they fit", () => {
+    const n1 = { key: "n:alpha", kind: "node", graphify_id: "alpha" };
+    const n2 = { key: "n:beta", kind: "node", graphify_id: "beta" };
+    const e1 = { key: "e:aaaa", kind: "edge", source_key: "n:alpha", target_key: "n:beta" };
+    const e2 = { key: "e:bbbb", kind: "edge", source_key: "n:alpha", target_key: "n:beta" };
+    const e3 = { key: "e:cccc", kind: "edge", source_key: "n:beta", target_key: "n:alpha" };
+    // Hash order would pack e: before n:. Node-centric must not.
+    const facts = [e1, e2, e3, n1, n2];
+    const { chunks } = chunkGraphifyFacts(facts, { maxFactsPerChunk: 10, maxChunkBytes: 50_000 });
+    assert.equal(chunks.length, 1);
+    const keys = chunks[0].fact_keys;
+    assert.ok(keys.indexOf("n:alpha") < keys.indexOf("e:aaaa"));
+    assert.ok(keys.indexOf("n:alpha") < keys.indexOf("e:bbbb"));
+    assert.ok(keys.indexOf("n:beta") < keys.indexOf("e:cccc"));
+  });
+
+  test("first chunk contains a node when nodes exist (no e:-prefix edge-only run)", () => {
+    const facts = [];
+    for (let i = 0; i < 8; i += 1) {
+      facts.push({ key: `e:${String(i).padStart(4, "0")}`, kind: "edge", source_key: "n:src", target_key: "n:dst" });
+    }
+    facts.push({ key: "n:src", kind: "node" });
+    facts.push({ key: "n:dst", kind: "node" });
+    const { chunks } = chunkGraphifyFacts(facts, { maxFactsPerChunk: 3, maxChunkBytes: 50_000 });
+    const firstKinds = chunks[0].facts.map((f) => f.kind);
+    assert.equal(firstKinds[0], "node");
+    assert.ok(firstKinds.includes("edge"));
+  });
+
+  test("orphan edges (source node absent) trail after all node groups", () => {
+    const ordered = orderFactsNodeCentric([
+      { key: "e:orphan", kind: "edge", source_key: "n:missing", target_key: "n:src" },
+      { key: "e:owned", kind: "edge", source_key: "n:src", target_key: "n:missing" },
+      { key: "n:src", kind: "node" },
+    ]);
+    assert.deepEqual(ordered.map((f) => f.key), ["n:src", "e:owned", "e:orphan"]);
+  });
+
+  test("every fact still appears exactly once", () => {
+    const loaded = loadGraphifyOutput(FIXTURE_DIR);
+    const { facts } = projectGraphifyFacts(loaded);
+    const { chunks } = chunkGraphifyFacts(facts, { maxFactsPerChunk: 3, maxChunkBytes: 10_000 });
+    const seen = chunks.flatMap((c) => c.fact_keys);
+    assert.equal(seen.length, facts.length);
+    assert.equal(new Set(seen).size, facts.length);
+  });
+});
+
+describe("locatorCoverage", () => {
+  test("counts nodes with file+line vs total nodes", () => {
+    const facts = [
+      { key: "n:a", kind: "node", source_file: "src/A.java", source_location: "L1" },
+      { key: "n:b", kind: "node" },
+      { key: "e:1", kind: "edge", source_key: "n:a", target_key: "n:b" },
+    ];
+    const cov = locatorCoverage(facts);
+    assert.equal(cov.total_nodes, 2);
+    assert.equal(cov.total_edges, 1);
+    assert.equal(cov.nodes_with_locator, 1);
+    assert.equal(cov.locator_percentage, 50);
+  });
+
+  test("projectGraphifyGraph exposes locator_coverage", () => {
+    const p = projectGraphifyGraph(loadGraphifyOutput(FIXTURE_DIR), { maxFactsPerChunk: 4 });
+    assert.ok(p.locator_coverage);
+    assert.ok(p.locator_coverage.total_nodes > 0);
+    assert.equal(typeof p.locator_coverage.locator_percentage, "number");
   });
 });

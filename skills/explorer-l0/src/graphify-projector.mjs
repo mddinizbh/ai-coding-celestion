@@ -362,12 +362,141 @@ export function renderFactsJsonl(facts) {
 }
 
 /**
+ * Locale-independent fact order by opaque key.
+ * @param {Record<string, unknown>} a
+ * @param {Record<string, unknown>} b
+ */
+function byFactKey(a, b) {
+  return compareCodeUnits(/** @type {string} */ (a.key), /** @type {string} */ (b.key));
+}
+
+/**
+ * Node-centric fact order: each node is followed by its outgoing edges and
+ * hyperedges (anchor = first node_key present in the node set). Edges whose
+ * source_key is not a projected node (and unanchored hyperedges) trail.
+ *
+ * Hash-order packing put every `e:` fact before every `n:` fact, so ~80% of
+ * chunks were edge-only and could not emit a valid relation (both endpoints
+ * must exist in the merged record set). Grouping outgoing edges with the
+ * source node makes the default worker payload able to emit both.
+ *
+ * @param {Record<string, unknown>[]} facts
+ * @returns {Record<string, unknown>[]}
+ */
+export function orderFactsNodeCentric(facts) {
+  /** @type {Record<string, unknown>[]} */
+  const nodes = [];
+  /** @type {Record<string, unknown>[]} */
+  const edges = [];
+  /** @type {Record<string, unknown>[]} */
+  const hypers = [];
+  /** @type {Record<string, unknown>[]} */
+  const rest = [];
+  for (const fact of facts) {
+    if (fact.kind === "node") nodes.push(fact);
+    else if (fact.kind === "edge") edges.push(fact);
+    else if (fact.kind === "hyperedge") hypers.push(fact);
+    else rest.push(fact);
+  }
+  nodes.sort(byFactKey);
+  edges.sort(byFactKey);
+  hypers.sort(byFactKey);
+  rest.sort(byFactKey);
+
+  const nodeKeys = new Set(nodes.map((n) => n.key));
+  /** @type {Map<string, Record<string, unknown>[]>} */
+  const edgesBySource = new Map();
+  /** @type {Record<string, unknown>[]} */
+  const orphanEdges = [];
+  for (const edge of edges) {
+    const src = typeof edge.source_key === "string" ? edge.source_key : "";
+    if (src !== "" && nodeKeys.has(src)) {
+      const list = edgesBySource.get(src) ?? [];
+      list.push(edge);
+      edgesBySource.set(src, list);
+    } else {
+      orphanEdges.push(edge);
+    }
+  }
+
+  /** @type {Map<string, Record<string, unknown>[]>} */
+  const hypersByAnchor = new Map();
+  /** @type {Record<string, unknown>[]} */
+  const orphanHypers = [];
+  for (const hyper of hypers) {
+    const keys = Array.isArray(hyper.node_keys) ? hyper.node_keys : [];
+    const anchor = keys.find((k) => typeof k === "string" && nodeKeys.has(k));
+    if (typeof anchor === "string") {
+      const list = hypersByAnchor.get(anchor) ?? [];
+      list.push(hyper);
+      hypersByAnchor.set(anchor, list);
+    } else {
+      orphanHypers.push(hyper);
+    }
+  }
+
+  /** @type {Record<string, unknown>[]} */
+  const ordered = [];
+  for (const node of nodes) {
+    const key = /** @type {string} */ (node.key);
+    ordered.push(node);
+    const outgoing = edgesBySource.get(key);
+    if (outgoing) ordered.push(...outgoing);
+    const anchored = hypersByAnchor.get(key);
+    if (anchored) ordered.push(...anchored);
+  }
+  ordered.push(...orphanEdges, ...orphanHypers, ...rest);
+  return ordered;
+}
+
+/**
+ * Share of node facts that carry a repo-relative file+line locator.
+ * This is the ceiling of `repository_verified_percentage` before any Explorer
+ * payload exists: nodes without a locator can only ever be `hipótese`.
+ *
+ * @param {Record<string, unknown>[]} facts
+ */
+export function locatorCoverage(facts) {
+  if (!Array.isArray(facts)) fail("facts must be an array");
+  let total_nodes = 0;
+  let nodes_with_locator = 0;
+  let total_edges = 0;
+  for (const fact of facts) {
+    if (!isPlainObject(fact)) continue;
+    if (fact.kind === "node") {
+      total_nodes += 1;
+      if (
+        typeof fact.source_file === "string"
+        && fact.source_file.length > 0
+        && typeof fact.source_location === "string"
+        && fact.source_location.length > 0
+      ) {
+        nodes_with_locator += 1;
+      }
+    } else if (fact.kind === "edge") {
+      total_edges += 1;
+    }
+  }
+  return {
+    total_nodes,
+    total_edges,
+    nodes_with_locator,
+    locator_percentage: total_nodes === 0 ? 0 : (100 * nodes_with_locator) / total_nodes,
+  };
+}
+
+/**
  * @param {Record<string, unknown>[]} facts
  * @param {{ maxChunkBytes?: number, maxFactsPerChunk?: number }} [options]
  */
 export function chunkGraphifyFacts(facts, options = {}) {
   if (!Array.isArray(facts)) {
     fail("facts must be an array");
+  }
+  for (const fact of facts) {
+    if (!isPlainObject(fact) || typeof fact.key !== "string") {
+      fail("each fact must be an object with a string key");
+    }
   }
   const maxBytes =
     typeof options.maxChunkBytes === "number" && options.maxChunkBytes > 0
@@ -403,7 +532,8 @@ export function chunkGraphifyFacts(facts, options = {}) {
     bucket = [];
   };
 
-  for (const fact of facts) {
+  const ordered = orderFactsNodeCentric(facts);
+  for (const fact of ordered) {
     if (!isPlainObject(fact) || typeof fact.key !== "string") {
       fail("each fact must be an object with a string key");
     }
@@ -452,6 +582,7 @@ export function projectGraphifyGraph(loaded, options = {}) {
     jsonl,
     jsonl_sha256: sha256Text(jsonl),
     jsonl_byte_length: Buffer.byteLength(jsonl, "utf8"),
+    locator_coverage: locatorCoverage(projected.facts),
     chunks,
     chunk_index,
     chunk_index_json: `${stableStringify(chunk_index)}\n`,

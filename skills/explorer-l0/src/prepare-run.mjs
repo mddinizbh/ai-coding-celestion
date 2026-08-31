@@ -213,6 +213,8 @@ export async function prepareRun(input, options = {}) {
 
   /** @type {{ producer_version: string, nodes_count: number, relations_count: number, relations_key: "edges"|"links" }} */
   let graphifyStats;
+  /** @type {{ total_nodes: number, total_edges: number, nodes_with_locator: number, locator_percentage: number }} */
+  let locatorCoverageStats;
   /** @type {object} */
   let descriptor;
   /** @type {object} */
@@ -314,6 +316,7 @@ export async function prepareRun(input, options = {}) {
             relations_count: loaded.relations.length,
             relations_key: loaded.relationsKey,
           };
+          locatorCoverageStats = projection.locator_coverage;
         } finally {
           try {
             rmSync(outputDir, { recursive: true, force: true });
@@ -349,6 +352,7 @@ export async function prepareRun(input, options = {}) {
     chunk_index: /** @type {{ chunk_index: object }} */ (descriptor).chunk_index,
     phase_timings_ms: timings,
     graphify: graphifyStats,
+    locator_coverage: locatorCoverageStats,
     // Internal-only handles (NOT serialized to CLI stdout):
     run_root: runRoot,
     runs_dir: layout.runs_dir,

@@ -47,7 +47,10 @@ phase before an earlier one completes:
    chunk_index, manifest_id, descriptor_sha256, phase_timings_ms, graphify}` —
    no absolute paths in stdout.
 3. **Explorer chunk dispatch** — for each chunk in `chunk_index.chunks`, dispatch
-   one Explorer subagent. The subagent reads its chunk file under the run root
+   one **`explorer-worker`** subagent (the cheap tier — the payload below is
+   closed-shape and deterministic `finalize` recomputes everything, so the
+   worker never needs a strong model; model binding is local to each member).
+   The subagent reads its chunk file under the run root
    and writes exactly one payload to `explorer/payloads/<chunk_key>.json` using
    the closed Explorer contract below. No intermediate JSON is authored by the
    user. Failed chunks (those returning `retryable` blockers such as a banned

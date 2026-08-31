@@ -28,13 +28,12 @@ Em qualquer repositório Git:
 /descobrir <projeto ou path>
 ```
 
-Fases (código + Explorer):
+Fases:
 
 1. `setup-status` — falha com instrução de setup se Graphify ausente/errado
 2. `prepare` — worktree + Graphify + chunks + descriptor
-3. Explorer por chunk — só semântica em `explorer/payloads/`
+3. `emit-payloads` — encoder mecânico, todos os chunks num processo
 4. `finalize` — verifica, persiste candidate
-5. Retry seletivo de chunks com blockers (até limite fixo)
 
 **Você não** escreve JSON intermediário nem roda Graphify na mão.
 
@@ -43,6 +42,8 @@ Fases (código + Explorer):
 ```bash
 node skills/descobrir/cli.mjs prepare \
   --namespace <ns> --logical-repo <repo> --project-path <abs>
+
+node skills/descobrir/cli.mjs emit-payloads --run-root <abs-run>
 
 node skills/descobrir/cli.mjs finalize \
   --run-root <abs-run> --db <sqlite> --source-repo <abs>
@@ -69,7 +70,7 @@ repositório — use `finalize` em produção.
 | Etapa | Dono |
 |---|---|
 | Graphify extract + manifest + hashes + IDs + coverage | Código (`prepare`/`finalize`) |
-| type/name/summary/relations intent | Explorer (LLM) |
+| payloads fechados | Código (`emit-payloads`) |
 | Accept baseline | Humano |
 | Obsidian Markdown | Projeção one-way do aceito |
 

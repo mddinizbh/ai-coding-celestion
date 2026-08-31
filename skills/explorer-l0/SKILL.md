@@ -10,13 +10,11 @@ description: >
 
 # explorer-l0 — baseline candidate (micro / L0)
 
-Operates a Git project in one invocation: it checks Graphify, prepares an isolated
-Graphify extraction, dispatches the deterministic chunks to the Explorer for semantic
-enrichment, finalizes a verified candidate, and persists it to the central SQLite
-store. The user supplies only project/config intent. No intermediate JSON is hand
-edited, and Graphify is invoked by the skill — never manually by the user.
+Operates a Git project in one invocation: Graphify extract, mechanical
+`emit-payloads`, `finalize` into SQLite. The agent **runs** those CLIs in
+order — that is executing L0. No per-chunk LLM, no hand-edited JSON.
 
-**Semantic LLM extraction is untrusted and stochastic.** Determinism applies only to:
+Determinism applies to:
 output shape, schema validation, canonical IDs, normalization, stable ordering,
 `canonical_graph_hash`, pinned-revision verification, CoverageReport derivation
 (`passed`/counts), and transaction behavior.
@@ -46,16 +44,14 @@ phase before an earlier one completes:
    descriptor, then removes the worktree. Emits `{status:"prepared", run_id,
    chunk_index, manifest_id, descriptor_sha256, phase_timings_ms, graphify}` —
    no absolute paths in stdout.
-3. **Explorer chunk dispatch** — for each chunk in `chunk_index.chunks`, dispatch
-   one **`explorer-worker`** subagent (the cheap tier — the payload below is
-   closed-shape and deterministic `finalize` recomputes everything, so the
-   worker never needs a strong model; model binding is local to each member).
-   The subagent reads its chunk file under the run root
-   and writes exactly one payload to `explorer/payloads/<chunk_key>.json` using
-   the closed Explorer contract below. No intermediate JSON is authored by the
-   user. Failed chunks (those returning `retryable` blockers such as a banned
-   authority field) are **re-dispatched in place** up to **3 attempts**; chunks
-   that already succeeded are never re-dispatched.
+3. **emit-payloads (mechanical dispatch)** — run
+   `cli.mjs emit-payloads --run-root <run_root>`. One process writes every
+   `explorer/payloads/c_0000.json` from Graphify facts (`natural_key` =
+   `graphify_id`; relations use a run-wide node index so endpoints may live
+   in another chunk). This **is** executing L0 — the agent runs the CLI;
+   it does not spawn an `explorer-worker` per chunk. Done when stdout is
+   `{status:"ok", chunks, records, relations, …}` and
+   `chunks === chunk_index.chunks.length`.
 4. **finalize** — `cli.mjs finalize --run-root <run_root> --db <db.sqlite>
    --source-repo <path>`. Validates prepared artifacts, merges payloads,
    re-derives evidence/ids/hash/coverage from the pinned Git reader, and
@@ -72,10 +68,9 @@ phase before an earlier one completes:
 - Status `setup_required` → stop, surface the setup command, then resume from
   phase 1.
 - Status `prepare_failed` → surface the cause; resume from phase 2 once fixed.
-- Status `blocked` (dispatch) → the `failed_chunk_keys` exhausted retries; the
-  run_id is preserved. Either re-dispatch with a corrected Explorer
-  instruction and re-run `finalize`, or `cleanup --run-id <run_id> --force`
-  to drop the run.
+- Status `blocked` after emit-payloads/finalize → `retryable_chunk_keys` name
+  the payloads. Re-run `emit-payloads` (idempotent overwrite) then `finalize`,
+  or `cleanup --run-id <run_id> --force` to drop the run.
 - Status `finalize_blocked` → blockers list the offending chunk keys and the
   offending field/locator. Re-dispatch only `retryable_chunk_keys`, then re-run
   `finalize` (idempotent: no duplicate candidate is written).
@@ -95,7 +90,8 @@ phase before an earlier one completes:
 
 ## Explorer output contract (exact)
 
-Emit **one JSON object** per chunk to `explorer/payloads/<chunk_key>.json`.
+`emit-payloads` writes **one JSON object** per chunk to
+`explorer/payloads/<chunk_key with :→_>.json` (`c:0000` → `c_0000.json`).
 Unknown fields are rejected. **No** `confidence`, `artifact_id`, prose scores,
 `id`, `status`, `evidence`, `canonical_graph_hash`, `path`, `uri`, absolute
 paths, raw source, or invented endpoint/call-chain schemas.
@@ -168,6 +164,8 @@ node "$L0CLI" setup
 node "$L0CLI" prepare \
   --namespace <ns> --logical-repo <repo> --project-path <path> \
   [--source-revision <sha>] [--db <path>]
+# run_root = ${XDG_CACHE_HOME:-~/.cache}/descobrir/runs/<run_id>
+node "$L0CLI" emit-payloads --run-root <run_root>
 node "$L0CLI" finalize \
   --run-root <run_root> --db <db.sqlite> --source-repo <path>
 

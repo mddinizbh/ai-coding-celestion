@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Descobrir skill CLI — setup | setup-status | prepare | finalize |
+ * Descobrir skill CLI — setup | setup-status | prepare | emit-payloads | finalize |
  *   status | cleanup | persist-candidate | accept | export | project-obsidian
  * Zero dependencies. SQLite is canonical; JSON is export-only.
  */
@@ -11,6 +11,7 @@ import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { canonicalizeCandidatePackage } from "./src/candidate-package.mjs";
+import { emitPayloads } from "./src/emit-payloads.mjs";
 import { sanitizeErrorMessage } from "./src/errors.mjs";
 import { finalizeRun } from "./src/finalize-run.mjs";
 import {
@@ -115,7 +116,7 @@ export async function main(argv) {
   try {
     if (!Array.isArray(argv) || argv.length === 0) {
       throw new Error(
-        "usage: setup | setup-status | prepare | finalize | status | cleanup | persist-candidate | accept | export | project-obsidian",
+        "usage: setup | setup-status | prepare | emit-payloads | finalize | status | cleanup | persist-candidate | accept | export | project-obsidian",
       );
     }
     const [command, ...rest] = argv;
@@ -189,8 +190,15 @@ export async function main(argv) {
           chunk_index: result.chunk_index,
           phase_timings_ms: result.phase_timings_ms,
           graphify: result.graphify,
+          locator_coverage: result.locator_coverage,
         };
         process.stdout.write(`${JSON.stringify(summary)}\n`);
+        return 0;
+      }
+      case "emit-payloads": {
+        const runRoot = requireFlag("run-root", flags);
+        const result = emitPayloads({ runRoot });
+        process.stdout.write(`${JSON.stringify(result)}\n`);
         return 0;
       }
       case "finalize": {

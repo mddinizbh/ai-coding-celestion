@@ -1,0 +1,55 @@
+# docker-compose.yml — stack local de desenvolvimento (UAI-34)
+# Postgres para journal (runs/challenges)
+# MongoDB para grafo aceito e memória de agentes
+#
+# Instruções completas: docs/local-stack.md
+# SQLite permanece o default quando o stack está parado.
+#
+# Portas host parametrizadas (evita colisão entre worktrees/clones):
+#   POSTGRES_HOST_PORT=5433 MONGO_HOST_PORT=27018 docker compose up -d --wait
+#
+# Uso rápido:
+#   docker compose up -d --wait
+#   docker compose ps
+#   docker compose down
+#   docker compose down -v   # reset volumes
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dev_journal
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password  # desenvolvimento apenas — não use em produção nem armazene segredos reais
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev_user -d dev_journal"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: dev_mongo_user
+      MONGO_INITDB_ROOT_PASSWORD: dev_mongo_pass  # desenvolvimento apenas — não use em produção nem armazene segredos reais
+    ports:
+      - "${MONGO_HOST_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  mongo_data:

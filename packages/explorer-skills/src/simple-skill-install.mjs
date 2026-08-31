@@ -90,6 +90,25 @@ function atomicWrite(filePath, contents) {
   }
 }
 
+function ensureCommand(commandName, commandBody) {
+  const cmdFile = join(configHome(), "opencode", "commands", commandName);
+  assertUnder(configHome(), cmdFile);
+  if (pathExists(cmdFile)) {
+    const text = readFileSync(cmdFile, "utf8");
+    if (!text.includes(MARKER)) {
+      return { command_skipped: cmdFile };
+    }
+  }
+  const body = commandBody.includes(MARKER)
+    ? commandBody
+    : `${commandBody}\n\n<!-- ${MARKER} -->\n`;
+  if (!body.includes("$ARGUMENTS")) {
+    throw new Error("command body must include $ARGUMENTS");
+  }
+  atomicWrite(cmdFile, body);
+  return { command: cmdFile };
+}
+
 /**
  * @param {string} skillName
  * @param {string} skillSourceAbs
@@ -98,23 +117,7 @@ function atomicWrite(filePath, contents) {
 export function installSimpleSkill(skillName, skillSourceAbs, opts = {}) {
   if (!skillSourceAbs && opts.commandName && opts.commandBody) {
     // command-only path — marker ONLY; never overwrite foreign (even if has $ARGUMENTS)
-    const cmdFile = join(configHome(), "opencode", "commands", opts.commandName);
-    assertUnder(configHome(), cmdFile);
-    if (pathExists(cmdFile)) {
-      const text = readFileSync(cmdFile, "utf8");
-      if (!text.includes(MARKER)) {
-        // never overwrite foreign cmd (even with $ARGUMENTS); skip but succeed install
-        return { command_skipped: cmdFile };
-      }
-    }
-    const body = opts.commandBody.includes(MARKER)
-      ? opts.commandBody
-      : `${opts.commandBody}\n\n<!-- ${MARKER} -->\n`;
-    if (!body.includes("$ARGUMENTS")) {
-      throw new Error("command body must include $ARGUMENTS");
-    }
-    atomicWrite(cmdFile, body);
-    return { command: cmdFile };
+    return ensureCommand(opts.commandName, opts.commandBody);
   }
   const source = realpathSync(skillSourceAbs);
   if (!existsSync(join(source, "SKILL.md"))) {
@@ -150,28 +153,18 @@ export function installSimpleSkill(skillName, skillSourceAbs, opts = {}) {
         // foreign broken (lexical does not match) → preserve, explicit skip
         const result = { skill_skipped: skillLink, source };
         if (opts.commandName && opts.commandBody) {
-          const cmdFile = join(configHome(), "opencode", "commands", opts.commandName);
-          if (!pathExists(cmdFile) || readFileSync(cmdFile, "utf8").includes(MARKER)) {
-            const body = opts.commandBody.includes(MARKER) ? opts.commandBody : `${opts.commandBody}\n\n<!-- ${MARKER} -->\n`;
-            atomicWrite(cmdFile, body);
-            result.command = cmdFile;
-          } else {
-            result.command_skipped = cmdFile;
-          }
+          const c = ensureCommand(opts.commandName, opts.commandBody);
+          if (c.command_skipped) result.command_skipped = c.command_skipped;
+          else result.command = c.command;
         }
         return result;
       } else {
         // foreign non-broken → skip
         const result = { skill_skipped: skillLink, source };
         if (opts.commandName && opts.commandBody) {
-          const cmdFile = join(configHome(), "opencode", "commands", opts.commandName);
-          if (!pathExists(cmdFile) || readFileSync(cmdFile, "utf8").includes(MARKER)) {
-            const body = opts.commandBody.includes(MARKER) ? opts.commandBody : `${opts.commandBody}\n\n<!-- ${MARKER} -->\n`;
-            atomicWrite(cmdFile, body);
-            result.command = cmdFile;
-          } else {
-            result.command_skipped = cmdFile;
-          }
+          const c = ensureCommand(opts.commandName, opts.commandBody);
+          if (c.command_skipped) result.command_skipped = c.command_skipped;
+          else result.command = c.command;
         }
         return result;
       }
@@ -184,33 +177,9 @@ export function installSimpleSkill(skillName, skillSourceAbs, opts = {}) {
   const result = { skill: skillLink, source };
 
   if (opts.commandName && opts.commandBody) {
-    const cmdFile = join(configHome(), "opencode", "commands", opts.commandName);
-    assertUnder(configHome(), cmdFile);
-    if (pathExists(cmdFile)) {
-      const text = readFileSync(cmdFile, "utf8");
-      if (!text.includes(MARKER)) {
-        // never overwrite foreign; skip cmd but keep skill symlink success
-        result.command_skipped = cmdFile;
-      } else {
-        const body = opts.commandBody.includes(MARKER)
-          ? opts.commandBody
-          : `${opts.commandBody}\n\n<!-- ${MARKER} -->\n`;
-        if (!body.includes("$ARGUMENTS")) {
-          throw new Error("command body must include $ARGUMENTS");
-        }
-        atomicWrite(cmdFile, body);
-        result.command = cmdFile;
-      }
-    } else {
-      const body = opts.commandBody.includes(MARKER)
-        ? opts.commandBody
-        : `${opts.commandBody}\n\n<!-- ${MARKER} -->\n`;
-      if (!body.includes("$ARGUMENTS")) {
-        throw new Error("command body must include $ARGUMENTS");
-      }
-      atomicWrite(cmdFile, body);
-      result.command = cmdFile;
-    }
+    const c = ensureCommand(opts.commandName, opts.commandBody);
+    if (c.command_skipped) result.command_skipped = c.command_skipped;
+    else result.command = c.command;
   }
 
   return result;

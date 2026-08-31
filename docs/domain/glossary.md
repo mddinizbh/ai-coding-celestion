@@ -99,6 +99,12 @@ Edge cross-service derivado de **contrato** (HTTP client→controller, tópico,
 cron, webhook), nunca de palpite. Confidence promove com config-map
 (0.55 → 0.95). Persistido no SQLite do namespace.
 
+### Auditor B/C
+Conferência sob demanda depois do L1. **B** amostra `path_match` exact e
+template contra código pinado (confirmado / rejeitado / indecidível). **C**
+registra HTTP/Kafka/Python no pinado que o extrator não emitiu. Não gera
+grafo; grava no journal (`explorer-ops`).
+
 ### JourneySpec / bind (L2)
 Jornada bottom-up: esqueleto proposto a partir de L1, enriquecido com âncoras
 L0, com `read_plan` obrigatório. Dois estados independentes:

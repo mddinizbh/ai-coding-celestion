@@ -13,6 +13,7 @@ agents/
 ├── opencode/            ← OpenCode (formato atual)
 │   ├── brainstorm.md        roster
 │   ├── explorer-indexer.md  roster
+│   ├── explorer-auditor.md  roster
 │   └── roles/               subagentes de tier (binding de modelo é local)
 │       ├── explorer-worker.md
 │       ├── explorer-matcher.md

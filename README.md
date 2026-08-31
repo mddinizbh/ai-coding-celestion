@@ -9,7 +9,7 @@ pt-BR. Sem nome de empresa no código.
 
 | Pasta | Conteúdo |
 |---|---|
-| `skills/explorer-*` | Pipeline de grafo de conhecimento (autoria própria) |
+| `skills/explorer-*` | Pipeline de grafo de conhecimento (autoria própria), incl. auditor L1 |
 | `skills/architecture-*`, `skills/db-setup` | Skills próprias complementares |
 | `agents/` | Agents finos (1 classe por papel, allow-list no frontmatter) |
 | `packages/explorer-skills` | Instalador das skills no OpenCode |

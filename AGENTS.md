@@ -36,6 +36,7 @@ Agents:
 |---|---|---|
 | `agents/opencode/brainstorm.md` | ✅ | explorer-query + grilling. Handoff só com frontier vazia |
 | `agents/opencode/explorer-indexer.md` | ✅ | Ritual L0 → Gate → L1 (config-map proposto) → freshness; L2 sob demanda |
+| `agents/opencode/explorer-auditor.md` | ✅ | Depois do L1: amostra exact/template + omissões HTTP/Kafka/Python; journal; não gera grafo |
 | `agents/opencode/roles/explorer-worker|matcher|synth` | ✅ | Tiers de execução do indexer — binding de modelo é local |
 | arquiteto, planner, orchestrator, coder, reviewer, tester | futuro | Mesmo padrão fino quando entrarem |
 
@@ -43,10 +44,12 @@ Skills próprias (instaladas via `packages/explorer-skills`):
 
 | Skill | Status | Papel |
 |---|---|---|
-| `explorer-l0` | ✅ auto-contida | Indexa 1 repo → baseline em SQLite (Human Gate) |
+| `explorer-l0` | ✅ auto-contida | Indexa 1 repo: prepare → emit-payloads → finalize (Human Gate) |
 | `explorer-l1` | ✅ | Stitch cross-service. PK v3 + restitch atômico + config-map derivado (llm-assisted: ROADMAP) |
 | `explorer-l2` | ✅ | Journeys bottom-up (L1 → L0 → read_plan) |
 | `explorer-query` | ✅ | Consulta com freshness (avisa baseline stale vs HEAD) |
+| `explorer-ops` | ✅ | Playbook operacional + journal SQLite das runs (desafios) |
+| `explorer-audit` | ✅ | Método do auditor: `sample` / `omissions` / `show` (pinado) |
 | `architecture-canvas`, `architecture-diagrams`, `db-setup` | ✅ | Complementares (diagrama interativo, docs de arquitetura, Postgres p/ agentes) |
 
 Skills de **terceiros** (superpowers etc.) não são versionadas aqui — ficam

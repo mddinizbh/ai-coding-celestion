@@ -35,8 +35,6 @@ contratos no `demo-system`).
 
 ---
 
-## P1 — honestidade do grafo (time)
-
 ### [GAP] Stale visível na consulta
 
 Regra do time: **o grafo sempre reflete a master**. Baseline velho responde
@@ -52,15 +50,21 @@ com confiança sobre código que não existe mais — pior que não ter grafo.
 
 ### [GAP] Store hexagonal: local hoje, compartilhado depois
 
-Hoje o SQLite nasce na máquina (`~/.local/share/descobrir/<ns>.sqlite`). O
-modelo alvo: a camada de store é uma **porta** — aponta para SQLite local
-agora, para um store compartilhado do time depois (todo mundo consulta a base
-pré-carregada, qualquer um adiciona repo/atualiza, grafo sempre da master).
+Hoje o SQLite nasce na máquina (`~/.local/share/descobrir/<ns>.sqlite` e
+`ops.sqlite`). O modelo alvo: **dois** stores na mesma porta —
 
-- Não construir agora. Exigência: nenhuma skill pode abrir o DB por path
-  Hardcoded — sempre via `--db`/config (a maioria já aceita; fechar os gaps)
-- Quando o time sentir a dor de N máquinas dessincronizadas, plugar o adapter
-  compartilhado sem tocar nas skills
+- **journal** (dores/runs) compartilhado primeiro — todo mundo publica
+  challenge; agente de melhoria lê histórico
+- **grafo canônico** da master depois — um baseline aceito por
+  `(namespace, logical_repo)`; rascunho continua local
+
+Handoff pra app/Oracle+Mongo (não se constrói neste repo):
+`docs/plans/store-compartilhado.md`.
+
+- Nenhuma skill abre DB por path hardcoded — `--db`/config (fechar gaps)
+- Skills não ganham driver remoto; adapter HTTP na porta
+- Quando o time sentir N máquinas dessincronizadas **e** o journal local já
+  estiver no hábito, plugar o remoto sem redesenhar as skills
 
 ### [GAP] Config-map vira artefato derivado (extrator de values + template)
 
@@ -180,6 +184,14 @@ skill de terceiros só na allow-list da peça.
 
 ## Feitos (para não reabrir)
 
+- ~~[P1] L0 emit-payloads mecânico~~ — dispatch de volume é `cli.mjs emit-payloads`
+  (mapa global de nós, `natural_key` = `graphify_id`). O agente **roda** o CLI;
+  não spawna worker por chunk. LLM fora do hot path.
+- ~~[P1] Chunking L0 node-centric~~ — fatos deixam de ser packed por hash
+  (`e:` antes de `n:` → 83% edge-only). `orderFactsNodeCentric` agrupa aresta
+  com o nó-fonte. Re-run 2026-08-31: edge-only 83%→4–11%; relations 0→centenas;
+  coverage 39–83%→87–97% (teto = locator coverage do Graphify, agora no
+  stdout do `prepare`). Filename de payload documentado (`c:0000` → `c_0000.json`).
 - ~~[P2] SQLite hardening~~ — WAL + `busy_timeout=5000` nos dois opens (L0 e
   L1); teste de contenção real (holder em processo separado segura o lock,
   writer espera ~1s e sucede — sem BUSY). Fan-out de N indexers no mesmo

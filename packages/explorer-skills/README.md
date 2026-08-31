@@ -8,6 +8,9 @@ Instala as skills **Explorer** no [OpenCode](https://opencode.ai):
 | explorer-l1 | `/explorer-l1` (alias `/l1`) |
 | explorer-l2 | `/explorer-l2` |
 | explorer-query | `/explorer-query` |
+| explorer-ops | `/explorer-ops` |
+| explorer-audit | `/explorer-audit` |
+| (agent cmds) | `/explorer-indexer`, `/explorer-auditor` |
 
 ## Install (usuário final)
 

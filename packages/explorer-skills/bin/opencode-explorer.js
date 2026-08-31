@@ -28,6 +28,10 @@ After install: quit and restart OpenCode, then use:
   /explorer-l1      stitch system edges
   /explorer-l2      bind journeys
   /explorer-query   ensure / answer / generate-human
+  /explorer-ops     journal + playbook
+  /explorer-audit   L1 auditor sample/omissions
+  /explorer-indexer agent ritual
+  /explorer-auditor agent ritual
 
 Dev (deste monorepo):
   node packages/explorer-skills/bin/opencode-explorer.js install

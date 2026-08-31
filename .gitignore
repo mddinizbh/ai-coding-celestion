@@ -1,5 +1,6 @@
 .omo/
 .superpowers/
+.worktrees/
 prototypes/descobrir-v1/output/
 prototypes/descobrir-v1/descobrir.config.json
 node_modules/

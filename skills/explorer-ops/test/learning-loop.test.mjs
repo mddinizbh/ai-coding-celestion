@@ -282,19 +282,77 @@ test("new revision without occurrence marks affected gap stale (does not resolve
   store.close();
 });
 
-test("confirmed recurrence reopens stale/resolved/superseded with history", () => {
+test("confirmed recurrence reopens stale gap with history", () => {
   const store = makeStore();
-  const base = confirmedObservation({observation_id: "obs-base", run_id: "run-base", source_revision: "rev-1", started_at: "2026-09-01T09:00:00.000Z"});
-  store.recordOutcome(outcomeInput({run_id: "run-base", source_revision: "rev-1", started_at: "2026-09-01T09:00:00.000Z", observations: [base]}));
-  // resolve it
-  store.resolveGap({gap_key: base.gap_key, resolution: "resolved", accepted_evidence_ref: "src/Client.kt#Client.call"});
-  // new run with new rev + same gap confirmed -> reopens
-  const rec = confirmedObservation({observation_id: "obs-rec", run_id: "run-rec", source_revision: "rev-2", started_at: "2026-09-01T13:00:00.000Z", gap_key: base.gap_key});
-  store.recordOutcome(outcomeInput({run_id: "run-rec", source_revision: "rev-2", started_at: "2026-09-01T13:00:00.000Z", observations: [rec]}));
-  const gap = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(base.gap_key);
-  assert.equal(gap.status, "open");
-  const hist = store._db.prepare("SELECT COUNT(*) as c FROM ops_gap_status_history WHERE gap_key = ? AND to_status = 'open'").get(base.gap_key).c;
-  assert.ok(hist >= 1);
+  const obs = confirmedObservation({observation_id: "obs-s1", run_id: "run-s1", source_revision: "rev-s1", started_at: "2026-09-01T09:00:00.000Z"});
+  store.recordOutcome(outcomeInput({run_id: "run-s1", source_revision: "rev-s1", started_at: "2026-09-01T09:00:00.000Z", observations: [obs]}));
+  // force stale via new-rev run with no occurrence
+  store.recordOutcome(outcomeInput({run_id: "run-s2", source_revision: "rev-s2", started_at: "2026-09-01T10:00:00.000Z", observations: []}));
+  const gapBefore = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(obs.gap_key);
+  assert.equal(gapBefore.status, "stale");
+  // new confirmed occurrence reopens
+  const rec = confirmedObservation({observation_id: "obs-s3", run_id: "run-s3", source_revision: "rev-s3", started_at: "2026-09-01T11:00:00.000Z", gap_key: obs.gap_key});
+  store.recordOutcome(outcomeInput({run_id: "run-s3", source_revision: "rev-s3", started_at: "2026-09-01T11:00:00.000Z", observations: [rec]}));
+  const gapAfter = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(obs.gap_key);
+  assert.equal(gapAfter.status, "open");
+  const hist = store._db.prepare("SELECT from_status, to_status FROM ops_gap_status_history WHERE gap_key = ? ORDER BY id DESC LIMIT 1").get(obs.gap_key);
+  assert.deepEqual({from_status: hist.from_status, to_status: hist.to_status}, {from_status: "stale", to_status: "open"});
+  store.close();
+});
+
+test("confirmed recurrence reopens resolved gap with history", () => {
+  const store = makeStore();
+  const obs = confirmedObservation({observation_id: "obs-r1", run_id: "run-r1", source_revision: "rev-r1", started_at: "2026-09-01T09:00:00.000Z"});
+  store.recordOutcome(outcomeInput({run_id: "run-r1", source_revision: "rev-r1", started_at: "2026-09-01T09:00:00.000Z", observations: [obs]}));
+  store.resolveGap({gap_key: obs.gap_key, resolution: "resolved", accepted_evidence_ref: "src/Client.kt#Client.call"});
+  const gapBefore = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(obs.gap_key);
+  assert.equal(gapBefore.status, "resolved");
+  const rec = confirmedObservation({observation_id: "obs-r2", run_id: "run-r2", source_revision: "rev-r2", started_at: "2026-09-01T12:00:00.000Z", gap_key: obs.gap_key});
+  store.recordOutcome(outcomeInput({run_id: "run-r2", source_revision: "rev-r2", started_at: "2026-09-01T12:00:00.000Z", observations: [rec]}));
+  const gapAfter = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(obs.gap_key);
+  assert.equal(gapAfter.status, "open");
+  const hist = store._db.prepare("SELECT from_status, to_status FROM ops_gap_status_history WHERE gap_key = ? ORDER BY id DESC LIMIT 1").get(obs.gap_key);
+  assert.deepEqual({from_status: hist.from_status, to_status: hist.to_status}, {from_status: "resolved", to_status: "open"});
+  store.close();
+});
+
+test("confirmed recurrence reopens superseded gap with history", () => {
+  const store = makeStore();
+  const obs = confirmedObservation({observation_id: "obs-u1", run_id: "run-u1", source_revision: "rev-u1", started_at: "2026-09-01T09:00:00.000Z"});
+  store.recordOutcome(outcomeInput({run_id: "run-u1", source_revision: "rev-u1", started_at: "2026-09-01T09:00:00.000Z", observations: [obs]}));
+  store.resolveGap({gap_key: obs.gap_key, resolution: "superseded", accepted_evidence_ref: "src/Client.kt#Client.call", replacement_gap_key: "gap-replacement"});
+  const gapBefore = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(obs.gap_key);
+  assert.equal(gapBefore.status, "superseded");
+  const rec = confirmedObservation({observation_id: "obs-u2", run_id: "run-u2", source_revision: "rev-u2", started_at: "2026-09-01T13:00:00.000Z", gap_key: obs.gap_key});
+  store.recordOutcome(outcomeInput({run_id: "run-u2", source_revision: "rev-u2", started_at: "2026-09-01T13:00:00.000Z", observations: [rec]}));
+  const gapAfter = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(obs.gap_key);
+  assert.equal(gapAfter.status, "open");
+  const hist = store._db.prepare("SELECT from_status, to_status FROM ops_gap_status_history WHERE gap_key = ? ORDER BY id DESC LIMIT 1").get(obs.gap_key);
+  assert.deepEqual({from_status: hist.from_status, to_status: hist.to_status}, {from_status: "superseded", to_status: "open"});
+  store.close();
+});
+
+test("resolveGap rejects superseded without evidence or human_closure", () => {
+  const {store, gap_key} = seededOpenGapStore();
+  const before = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(gap_key).status;
+  const histBefore = store._db.prepare("SELECT COUNT(*) as c FROM ops_gap_status_history WHERE gap_key = ?").get(gap_key).c;
+  assert.throws(() => store.resolveGap({gap_key, resolution: "superseded", replacement_gap_key: "gap-x"}), OpsStoreError);
+  const after = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(gap_key).status;
+  const histAfter = store._db.prepare("SELECT COUNT(*) as c FROM ops_gap_status_history WHERE gap_key = ?").get(gap_key).c;
+  assert.equal(after, before);
+  assert.equal(histAfter, histBefore);
+  store.close();
+});
+
+test("resolveGap rejects superseded without replacement_gap_key", () => {
+  const {store, gap_key} = seededOpenGapStore();
+  const before = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(gap_key).status;
+  const histBefore = store._db.prepare("SELECT COUNT(*) as c FROM ops_gap_status_history WHERE gap_key = ?").get(gap_key).c;
+  assert.throws(() => store.resolveGap({gap_key, resolution: "superseded", accepted_evidence_ref: "src/Client.kt#Client.call"}), OpsStoreError);
+  const after = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(gap_key).status;
+  const histAfter = store._db.prepare("SELECT COUNT(*) as c FROM ops_gap_status_history WHERE gap_key = ?").get(gap_key).c;
+  assert.equal(after, before);
+  assert.equal(histAfter, histBefore);
   store.close();
 });
 

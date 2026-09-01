@@ -71,6 +71,26 @@ function findMatchingBrace(body, openIndex) {
   return body.length;
 }
 
+function findFirstUnquotedBrace(text) {
+  let quote = "";
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === quote) quote = "";
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      quote = c;
+      continue;
+    }
+    if (c === "{") return i;
+  }
+  return -1;
+}
+
 function collectTypes(body) {
   const types = [];
   const declaration = /(?:^|\n)((?:[ \t]*@[^\n]+\n)*)[ \t]*(?:(?:public|private|protected|internal|abstract|final|open|data|sealed|static)\s+)*(?:class|interface)\s+(\w+)[^{\n]*\{/g;
@@ -119,7 +139,7 @@ function collectMethods(body, type) {
   return declarations.map((declaration, index) => {
     const nextStart = declarations[index + 1]?.start ?? type.bodyEnd;
     const signature = body.slice(declaration.start, Math.min(declaration.signatureEnd, nextStart));
-    const openOffset = signature.indexOf("{");
+    const openOffset = findFirstUnquotedBrace(signature);
     const end = openOffset < 0
       ? nextStart
       : Math.min(findMatchingBrace(body, declaration.start + openOffset), nextStart);

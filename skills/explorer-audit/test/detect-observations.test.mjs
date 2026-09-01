@@ -386,3 +386,23 @@ test("dynamic vs static completeness: non-empty args complete, zero/unknown inco
   assert.equal(dyn.coverage_classification, "UNKNOWN");
   rmSync(repo.cwd, { recursive: true, force: true });
 });
+
+test("Spring controller with {id} in named path annotation yields complete path and POSSIBLE_OMISSION (regression)", () => {
+  const repo = makeRepo({
+    "src/OrderController.java":
+      'public class OrderController {\n  @GetMapping(path = "/orders/{id}")\n  public void get() {}\n}',
+  });
+  const observations = detectObservations({
+    namespace: "ns",
+    run_id: "run-1",
+    repo_path: repo.cwd,
+    revision: repo.head,
+    logical_repo: "orders",
+    frontier_report: { facts: [], files_scanned: 1, files_total: 1, source_revision: repo.head },
+  });
+  const obs = observations.find((o) => o.source_anchor === "OrderController#get");
+  assert.ok(obs, "observation for get must exist");
+  assert.equal(obs.coverage_classification, "POSSIBLE_OMISSION");
+  assert.ok(obs.signal_key && obs.signal_key.fields && obs.signal_key.fields.path && obs.signal_key.fields.path.includes("{id}"), "path must be complete and contain {id}");
+  rmSync(repo.cwd, { recursive: true, force: true });
+});

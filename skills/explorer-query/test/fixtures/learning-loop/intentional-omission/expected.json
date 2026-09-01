@@ -1,0 +1,21 @@
+{
+  "capability": "intentional-omission",
+  "outcomes": [
+    {
+      "source_anchor": "PolicyBoundary#generated",
+      "expected_edge": false,
+      "expected_omission": false,
+      "coverage_classification": "POSSIBLE_OMISSION",
+      "detected_confirmation_status": "NEEDS_REVIEW",
+      "review_decision": "REJECTED",
+      "final_confirmation_status": "REJECTED",
+      "gap_occurrence": false
+    }
+  ],
+  "expected_metrics": {
+    "edge_precision": "N/A",
+    "edge_recall": "N/A",
+    "omission_precision": "N/A",
+    "omission_recall": "N/A"
+  }
+}

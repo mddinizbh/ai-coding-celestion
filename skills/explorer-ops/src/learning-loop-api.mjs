@@ -31,6 +31,26 @@ function hasUnsafe(v) {
   return false;
 }
 
+function isValidRepositoryReference(ref) {
+  if (typeof ref !== "string" || ref === "") return false;
+  if (hasUnsafe(ref)) return false;
+  if (ref.includes("..")) return false;
+  if (PATH_RE.test(ref)) return false;
+  if (!ref.includes("#")) return false;
+  const [pathPart, anchor] = ref.split("#");
+  if (!pathPart || pathPart.trim() === "" || !anchor || anchor.trim() === "") return false;
+  if (!/[a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+#/.test(ref)) return false;
+  return true;
+}
+
+function isValidHumanClosure(closure) {
+  if (!closure || typeof closure !== "object") return false;
+  if (typeof closure.actor !== "string" || closure.actor.trim() === "") return false;
+  if (typeof closure.reason !== "string" || closure.reason.trim() === "") return false;
+  if (hasUnsafe(closure.actor) || hasUnsafe(closure.reason)) return false;
+  return true;
+}
+
 export function createLearningLoopApi(db, persistence) {
   if (!db || typeof db.prepare !== "function") {
     throw new OpsStoreError("db must be a DatabaseSync instance");
@@ -49,6 +69,11 @@ export function createLearningLoopApi(db, persistence) {
     }
     if (typeof run.started_at !== "string" || run.started_at === "") {
       throw new OpsStoreError("run.started_at is required for deterministic retry identity");
+    }
+    for (const obs of input.observations) {
+      if (obs.run_id !== run.run_id || obs.source_revision !== run.source_revision) {
+        throw new OpsStoreError("observation/run identity mismatch");
+      }
     }
     const started_at = run.started_at;
 
@@ -193,52 +218,60 @@ export function createLearningLoopApi(db, persistence) {
       throw new OpsStoreError("gap must be open or stale");
     }
 
-    let evidence_ref = input.accepted_evidence_ref ?? null;
-    if (evidence_ref && hasUnsafe(evidence_ref)) {
-      throw new OpsStoreError("unsafe content in evidence_ref (path, hostname or secret)");
+    const evidence_ref = input.accepted_evidence_ref ?? null;
+    const human = input.human_closure ?? null;
+    const replacement = input.replacement_gap_key ?? null;
+
+    if (evidence_ref && !isValidRepositoryReference(evidence_ref)) {
+      throw new OpsStoreError("accepted_evidence_ref must be a scrubbed relative repository reference (path#anchor)");
     }
-    if (input.human_closure && hasUnsafe(input.human_closure)) {
-      throw new OpsStoreError("unsafe content in human_closure");
+    if (human && !isValidHumanClosure(human)) {
+      throw new OpsStoreError("human_closure requires non-empty actor and reason (scrubbed)");
     }
-    if (input.replacement_gap_key && hasUnsafe(input.replacement_gap_key)) {
+    if (replacement && hasUnsafe(replacement)) {
       throw new OpsStoreError("unsafe content in replacement_gap_key");
     }
 
-    if (input.resolution === "resolved") {
-      if (!evidence_ref && !input.human_closure) {
-        throw new OpsStoreError("resolved requires accepted_evidence_ref or human_closure");
-      }
+    const hasClosure = !!evidence_ref || !!human;
+    if (!hasClosure) {
+      throw new OpsStoreError("resolved and superseded require accepted_evidence_ref or human_closure");
     }
-    if (input.resolution === "superseded") {
-      if (!input.replacement_gap_key) {
-        throw new OpsStoreError("superseded requires replacement_gap_key");
-      }
+    if (input.resolution === "superseded" && (!replacement || replacement === "")) {
+      throw new OpsStoreError("superseded requires replacement_gap_key");
     }
 
     const previous_status = gap.status;
-    persistence.updateGapStatus({
-      gap_key: input.gap_key,
-      expected_statuses: [previous_status],
-      to_status: input.resolution,
-    });
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      persistence.updateGapStatus({
+        gap_key: input.gap_key,
+        expected_statuses: [previous_status],
+        to_status: input.resolution,
+      });
 
-    const transition_reason = input.resolution === "resolved" ? "gap-resolved" : "gap-superseded";
-    persistence.appendGapHistory({
-      gap_key: input.gap_key,
-      run_id: null,
-      from_status: previous_status,
-      to_status: input.resolution,
-      source_revision: null,
-      transition_reason,
-      evidence_ref: evidence_ref ?? (input.human_closure ? stableStringify(input.human_closure) : null),
-      created_at: new Date().toISOString(), // resolution is manual, not retry-deterministic
-    });
+      const transition_reason = input.resolution === "resolved" ? "gap-resolved" : "gap-superseded";
+      persistence.appendGapHistory({
+        gap_key: input.gap_key,
+        run_id: null,
+        from_status: previous_status,
+        to_status: input.resolution,
+        source_revision: null,
+        transition_reason,
+        evidence_ref: evidence_ref ?? (human ? stableStringify(human) : null),
+        created_at: new Date().toISOString(),
+      });
 
-    return {
-      gap_key: input.gap_key,
-      previous_status,
-      status: input.resolution,
-    };
+      db.exec("COMMIT");
+      return {
+        gap_key: input.gap_key,
+        previous_status,
+        status: input.resolution,
+      };
+    } catch (e) {
+      db.exec("ROLLBACK");
+      if (e instanceof OpsStoreError) throw e;
+      throw new OpsStoreError(e?.message || "resolveGap failed");
+    }
   }
 
   return {

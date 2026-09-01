@@ -253,3 +253,87 @@ test("updateGapStatus uses exact brief signature and performs status update only
   assert.equal(histAfter, histBefore); // no history row added by primitive
   store.close();
 });
+
+// Task 4 Fix Round 1/5 - complete state/limit/closure/identity matrix
+test("recordOutcome rejects observation/run identity mismatch before any write", () => {
+  const store = makeStore();
+  const badObs = confirmedObservation({observation_id: "obs-mismatch", run_id: "run-other", source_revision: "rev-x"});
+  assert.throws(() => store.recordOutcome(outcomeInput({run_id: "run-1", observations: [badObs]})), OpsStoreError);
+  assert.equal(store._db.prepare("SELECT COUNT(*) AS n FROM ops_observations").get().n, 0);
+  store.close();
+});
+
+test("new confirmed observation creates open gap", () => {
+  const store = makeStore();
+  const obs = confirmedObservation({observation_id: "obs-new", run_id: "run-new", source_revision: "rev-new", started_at: "2026-09-01T11:00:00.000Z"});
+  const res = store.recordOutcome(outcomeInput({run_id: "run-new", source_revision: "rev-new", started_at: "2026-09-01T11:00:00.000Z", observations: [obs]}));
+  assert.equal(res.gap_occurrences_created, 1);
+  const gap = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(obs.gap_key);
+  assert.equal(gap.status, "open");
+  store.close();
+});
+
+test("new revision without occurrence marks affected gap stale (does not resolve)", () => {
+  const {store, gap_key} = seededOpenGapStore();
+  // new run with different revision, no occurrence for the gap
+  const res = store.recordOutcome(outcomeInput({run_id: "run-stale", source_revision: "rev-stale", started_at: "2026-09-01T12:00:00.000Z", observations: []}));
+  const gap = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(gap_key);
+  assert.equal(gap.status, "stale");
+  store.close();
+});
+
+test("confirmed recurrence reopens stale/resolved/superseded with history", () => {
+  const store = makeStore();
+  const base = confirmedObservation({observation_id: "obs-base", run_id: "run-base", source_revision: "rev-1", started_at: "2026-09-01T09:00:00.000Z"});
+  store.recordOutcome(outcomeInput({run_id: "run-base", source_revision: "rev-1", started_at: "2026-09-01T09:00:00.000Z", observations: [base]}));
+  // resolve it
+  store.resolveGap({gap_key: base.gap_key, resolution: "resolved", accepted_evidence_ref: "src/Client.kt#Client.call"});
+  // new run with new rev + same gap confirmed -> reopens
+  const rec = confirmedObservation({observation_id: "obs-rec", run_id: "run-rec", source_revision: "rev-2", started_at: "2026-09-01T13:00:00.000Z", gap_key: base.gap_key});
+  store.recordOutcome(outcomeInput({run_id: "run-rec", source_revision: "rev-2", started_at: "2026-09-01T13:00:00.000Z", observations: [rec]}));
+  const gap = store._db.prepare("SELECT status FROM ops_coverage_gaps WHERE gap_key = ?").get(base.gap_key);
+  assert.equal(gap.status, "open");
+  const hist = store._db.prepare("SELECT COUNT(*) as c FROM ops_gap_status_history WHERE gap_key = ? AND to_status = 'open'").get(base.gap_key).c;
+  assert.ok(hist >= 1);
+  store.close();
+});
+
+test("resolveGap accepts human_closure for resolved and superseded", () => {
+  const store = makeStore();
+  const obs1 = confirmedObservation({observation_id: "obs-h1", run_id: "run-h1", source_revision: "rev-h1", started_at: "2026-09-01T09:00:00.000Z"});
+  store.recordOutcome(outcomeInput({run_id: "run-h1", source_revision: "rev-h1", started_at: "2026-09-01T09:00:00.000Z", observations: [obs1]}));
+  const r1 = store.resolveGap({gap_key: obs1.gap_key, resolution: "resolved", human_closure: {actor: "reviewer", reason: "covered by integration test"}});
+  assert.equal(r1.status, "resolved");
+  // reopen with matching run/rev for recurrence
+  const obs2 = confirmedObservation({observation_id: "obs-h2", run_id: "run-h2", source_revision: "rev-h2", started_at: "2026-09-01T14:00:00.000Z", gap_key: obs1.gap_key});
+  store.recordOutcome(outcomeInput({run_id: "run-h2", source_revision: "rev-h2", started_at: "2026-09-01T14:00:00.000Z", observations: [obs2]}));
+  const r2 = store.resolveGap({gap_key: obs1.gap_key, resolution: "superseded", human_closure: {actor: "architect", reason: "replaced by new contract"}, replacement_gap_key: "gap-new-contract"});
+  assert.equal(r2.status, "superseded");
+  store.close();
+});
+
+test("resolveGap rejects invalid evidence_ref (absolute, .., no anchor, prose)", () => {
+  const {store, gap_key} = seededOpenGapStore();
+  assert.throws(() => store.resolveGap({gap_key, resolution: "resolved", accepted_evidence_ref: "/Users/foo/src/Client.kt#call"}), OpsStoreError);
+  assert.throws(() => store.resolveGap({gap_key, resolution: "resolved", accepted_evidence_ref: "../src/Client.kt#call"}), OpsStoreError);
+  assert.throws(() => store.resolveGap({gap_key, resolution: "resolved", accepted_evidence_ref: "src/Client.kt"}), OpsStoreError);
+  assert.throws(() => store.resolveGap({gap_key, resolution: "resolved", accepted_evidence_ref: "just some prose without path"}), OpsStoreError);
+  store.close();
+});
+
+test("loadContext default 20, rejects <1/non-integer, caps >50 to 50, only open/stale, no history", () => {
+  const store = seededContextStore(60);
+  // default
+  const d = store.loadContext({scope: {namespace: "ns", logical_repos: ["checkout"]}, objective: "audit"});
+  assert.equal(d.gaps.length, 20);
+  // reject
+  assert.throws(() => store.loadContext({scope: {namespace: "ns", logical_repos: ["checkout"]}, objective: "a", limit: 0}), OpsStoreError);
+  assert.throws(() => store.loadContext({scope: {namespace: "ns", logical_repos: ["checkout"]}, objective: "a", limit: "foo"}), OpsStoreError);
+  // cap
+  const c = store.loadContext({scope: {namespace: "ns", logical_repos: ["checkout"]}, objective: "a", limit: 100});
+  assert.equal(c.gaps.length, 50);
+  // only open/stale + no history key
+  assert.ok(c.gaps.every(g => g.status === "open" || g.status === "stale"));
+  assert.equal(Object.hasOwn(c, "history"), false);
+  store.close();
+});

@@ -226,25 +226,12 @@ export function createLearningLoopPersistence(db) {
     return db.prepare("SELECT * FROM ops_coverage_gaps WHERE gap_key = ?").get(gap_key) || null;
   }
 
-  function updateGapStatus({ gap_key, expected_statuses, to_status, created_at }) {
+  function updateGapStatus({ gap_key, expected_statuses, to_status }) {
     const current = getCoverageGap(gap_key);
     if (!current || !expected_statuses.includes(current.status)) {
       throw new OpsStoreError("unexpected status");
     }
-    if (typeof created_at !== "string" || created_at === "") {
-      throw new OpsStoreError("created_at is required for deterministic retry identity");
-    }
     db.prepare("UPDATE ops_coverage_gaps SET status = ? WHERE gap_key = ?").run(to_status, gap_key);
-    appendGapHistory({
-      gap_key,
-      run_id: null,
-      from_status: current.status,
-      to_status,
-      source_revision: null,
-      transition_reason: "manual-update",
-      evidence_ref: null,
-      created_at,
-    });
   }
 
   function listContextGaps({ scope, limit = 50 }) {

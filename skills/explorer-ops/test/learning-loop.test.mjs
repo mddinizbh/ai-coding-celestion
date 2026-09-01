@@ -136,3 +136,27 @@ test("missing deterministic timestamps are rejected with OpsStoreError", () => {
   assert.throws(() => persistence.insertOrCompareObservation(obs), OpsStoreError);
   store.close();
 });
+
+test("updateGapStatus uses exact brief signature and performs status update only (no history)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ops-loop-"));
+  const store = openOpsStore(join(dir, "ops.sqlite"));
+  const persistence = createLearningLoopPersistence(store._db);
+  // seed a gap via ensure + occurrence (Task 4 path)
+  store.log({run_id: "run-us", phase: "audit", status: "ok"});
+  const obs = persistedObservation({run_id: "run-us", observation_id: "obs-us", observed_at: "2026-09-01T13:00:00.000Z"});
+  persistence.insertOrCompareObservation(obs);
+  const gapKey = obs.gap_key;
+  persistence.ensureCoverageGap({gap_key: gapKey, reason: obs.gap_reason, scope: obs.gap_scope, capability: obs.capability, target_signature: obs.target_signature, observed_at: obs.observed_at});
+  persistence.insertGapOccurrence({run_id: obs.run_id, gap_key: gapKey, observation_id: obs.observation_id, source_revision: obs.source_revision, observed_at: obs.observed_at});
+  // initial status open
+  const before = persistence.getCoverageGap(gapKey);
+  assert.equal(before.status, "open");
+  const histBefore = store._db.prepare("SELECT COUNT(*) as c FROM ops_gap_status_history WHERE gap_key = ?").get(gapKey).c;
+  // exact 3-field call per brief
+  persistence.updateGapStatus({gap_key: gapKey, expected_statuses: ["open"], to_status: "stale"});
+  const after = persistence.getCoverageGap(gapKey);
+  assert.equal(after.status, "stale");
+  const histAfter = store._db.prepare("SELECT COUNT(*) as c FROM ops_gap_status_history WHERE gap_key = ?").get(gapKey).c;
+  assert.equal(histAfter, histBefore); // no history row added by primitive
+  store.close();
+});

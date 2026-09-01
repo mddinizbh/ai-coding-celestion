@@ -5,7 +5,7 @@
  */
 import { pathToFileURL } from "node:url";
 
-import { defaultOpsDbPath, openOpsStore } from "./src/store.mjs";
+import { defaultOpsDbPath, openOpsStore, OpsStoreError } from "./src/store.mjs";
 
 function parseArgs(argv) {
   /** @type {Record<string, string | boolean>} */
@@ -98,6 +98,41 @@ export function main(argv) {
           process.stdout.write(`${JSON.stringify({ challenges: rows }, null, 2)}\n`);
           return 0;
         }
+        case "record-outcome": {
+          const input = JSON.parse(req(flags, "input-json"));
+          const out = store.recordOutcome(input);
+          process.stdout.write(`${JSON.stringify(out)}\n`);
+          return 0;
+        }
+        case "load-context": {
+          const scope = JSON.parse(req(flags, "scope-json"));
+          const limit = typeof flags.limit === "string" ? Number(flags.limit) : undefined;
+          const out = store.loadContext({
+            scope,
+            objective: req(flags, "objective"),
+            ...(limit === undefined ? {} : { limit }),
+          });
+          process.stdout.write(`${JSON.stringify(out)}\n`);
+          return 0;
+        }
+        case "resolve-gap": {
+          const humanClosure = typeof flags["human-closure-json"] === "string"
+            ? JSON.parse(flags["human-closure-json"])
+            : undefined;
+          const out = store.resolveGap({
+            gap_key: req(flags, "gap-key"),
+            resolution: req(flags, "resolution"),
+            ...(typeof flags["accepted-evidence-ref"] === "string"
+              ? { accepted_evidence_ref: flags["accepted-evidence-ref"] }
+              : {}),
+            ...(typeof flags["replacement-gap-key"] === "string"
+              ? { replacement_gap_key: flags["replacement-gap-key"] }
+              : {}),
+            ...(humanClosure === undefined ? {} : { human_closure: humanClosure }),
+          });
+          process.stdout.write(`${JSON.stringify(out)}\n`);
+          return 0;
+        }
         default:
           throw new Error(`unknown command: ${cmd}`);
       }
@@ -106,7 +141,7 @@ export function main(argv) {
     }
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-    return 1;
+    return err instanceof OpsStoreError ? 2 : 1;
   }
 }
 

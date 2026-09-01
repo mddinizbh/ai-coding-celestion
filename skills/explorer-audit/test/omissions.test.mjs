@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 
-import { classifyHit, coveredByFact, scanOmissions } from "../src/omissions.mjs";
+import { classifyHit, coveredByFact, scanOmissions, scanObservations } from "../src/omissions.mjs";
 import { showPinned } from "../src/show.mjs";
 
 function git(cwd, args) {
@@ -73,3 +73,33 @@ describe("scanOmissions", () => {
     assert.equal(shown.window.find((w) => w.mark).text.includes("requests.get"), true);
   });
 });
+
+test("scanObservations adapter returns final classified Observations (backward compatible)", () => {
+  const repo = makeRepoForAdapter({
+    "src/Client.kt":
+      'class Client {\n  fun fetch() = RestTemplate().getForObject("/invoices/{id}", Invoice::class.java)\n}\n',
+  });
+  const out = scanObservations({
+    namespace: "ns",
+    run_id: "run-1",
+    repos: [{ logical_repo: "checkout", repo_path: repo.cwd, revision: repo.head }],
+  });
+  assert.ok(out && Array.isArray(out.observations));
+  const http = out.observations.find((o) => o.capability === "cross-repo-http");
+  assert.ok(http);
+  assert.equal(http.logical_repo, "checkout");
+  assert.ok(["NEEDS_REVIEW", "AUTO_CONFIRMED", "NOT_APPLICABLE"].includes(http.confirmation_status));
+  rmSync(repo.cwd, { recursive: true, force: true });
+});
+
+function makeRepoForAdapter(files) {
+  const cwd = mkdtempSync(join(tmpdir(), "adapter-"));
+  git(cwd, ["init", "-q", "-b", "main"]);
+  for (const [relativeFile, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(cwd, relativeFile)), { recursive: true });
+    writeFileSync(join(cwd, relativeFile), body);
+  }
+  git(cwd, ["add", "."]);
+  git(cwd, ["-c", "user.email=t@t", "-c", "user.name=T", "commit", "-q", "-m", "fixture"]);
+  return { cwd, head: git(cwd, ["rev-parse", "HEAD"]) };
+}

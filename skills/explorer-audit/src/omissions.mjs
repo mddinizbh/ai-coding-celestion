@@ -154,3 +154,38 @@ export function scanOmissions(input) {
     omissions: merged,
   };
 }
+
+/**
+ * Backward-compatible Observation report adapter.
+ * Calls inspectRepoFrontier + detectObservations per repo, returns final classified Observations.
+ * Preserves all existing scanOmissions behavior and outputs.
+ */
+export function scanObservations(input) {
+  const { namespace, run_id, repos = [] } = input;
+  /** @type {import("./detect-observations.mjs").Observation[]} */
+  const observations = [];
+  for (const repo of repos) {
+    const frontier = inspectRepoFrontier({
+      repoPath: repo.repo_path,
+      revision: repo.revision,
+      namespace,
+      logical_repo: repo.logical_repo,
+    });
+    const frontier_report = {
+      facts: frontier.facts || [],
+      files_scanned: frontier.files_scanned || 0,
+      files_total: frontier.files_total || 0,
+      source_revision: frontier.source_revision || repo.revision,
+    };
+    const obs = detectObservations({
+      namespace,
+      run_id,
+      repo_path: repo.repo_path,
+      revision: repo.revision,
+      logical_repo: repo.logical_repo,
+      frontier_report,
+    });
+    observations.push(...obs);
+  }
+  return { observations };
+}

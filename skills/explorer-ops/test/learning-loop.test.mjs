@@ -40,6 +40,50 @@ function persistedObservation(overrides = {}) {
   return merged;
 }
 
+// Task 4 builders (exact from brief)
+function makeStore() {
+  const dir = mkdtempSync(join(tmpdir(), "ops-loop-api-"));
+  return openOpsStore(join(dir, "ops.sqlite"));
+}
+
+function reviewObservation(overrides = {}) {
+  return persistedObservation(Object.assign({gap_reason: undefined, gap_scope: undefined, gap_key: undefined, coverage_classification: "MAYBE_COVERED", confirmation_status: "NEEDS_REVIEW"}, overrides));
+}
+
+function coveredObservation(overrides = {}) {
+  return persistedObservation(Object.assign({observation_id: "obs-covered", gap_reason: undefined, gap_scope: undefined, gap_key: undefined, coverage_classification: "COVERED", confirmation_status: "NOT_APPLICABLE"}, overrides));
+}
+
+function confirmedObservation(overrides = {}) {
+  return persistedObservation(Object.assign({coverage_classification: "POSSIBLE_OMISSION", confirmation_status: "AUTO_CONFIRMED"}, overrides));
+}
+
+function outcomeInput(overrides = {}) {
+  const run_id = overrides.run_id ?? "run-1";
+  return {
+    run: {run_id, namespace: "ns", phase: "audit", status: "ok", logical_repos: ["checkout"], source_revision: overrides.source_revision ?? "rev-1", started_at: overrides.started_at ?? "2026-09-01T10:00:00.000Z"},
+    observations: overrides.observations ?? [],
+  };
+}
+
+function seededOpenGapStore() {
+  const store = makeStore();
+  const observation = confirmedObservation();
+  store.recordOutcome(outcomeInput({observations: [observation]}));
+  return {store, gap_key: observation.gap_key};
+}
+
+function seededContextStore(count) {
+  const store = makeStore();
+  const observations = Array.from({length: count}, (_, index) => confirmedObservation({
+    observation_id: `obs-${index}`,
+    to_contract_key: `GET /invoices/${index}`,
+    source_anchor: `Client#fetch${index}`,
+  }));
+  store.recordOutcome(outcomeInput({observations}));
+  return store;
+}
+
 function seedTwoRunsForOneGap(store, persistence) {
   store.log({run_id: "run-1", namespace: "ns", phase: "audit", status: "ok", logical_repos: ["checkout"]});
   store.log({run_id: "run-2", namespace: "ns", phase: "audit", status: "ok", logical_repos: ["checkout"]});
@@ -112,6 +156,55 @@ test("primitives compose inside caller-owned transaction and rollback removes ro
     store.close();
   }
 });
+
+// Task 4 tests (failing RED before impl)
+test("recordOutcome reuses identical retry without a second occurrence", () => {
+  const store = makeStore();
+  const input = outcomeInput({run_id: "run-1", observations: [confirmedObservation({observation_id: "obs-1"})]});
+  const first = store.recordOutcome(input);
+  const retry = store.recordOutcome(input);
+  assert.equal(first.gap_occurrences_created, 1);
+  assert.equal(retry.gap_occurrences_created, 0);
+  assert.equal(store._db.prepare("SELECT COUNT(*) AS n FROM ops_gap_occurrences").get().n, 1);
+  store.close();
+});
+
+test("divergent retry rolls back every row from that call", () => {
+  const store = makeStore();
+  store.recordOutcome(outcomeInput({run_id: "run-1", observations: [reviewObservation({observation_id: "obs-1", line: 10})]}));
+  assert.throws(
+    () => store.recordOutcome(outcomeInput({run_id: "run-1", observations: [reviewObservation({observation_id: "obs-1", line: 11}), reviewObservation({observation_id: "obs-2", line: 20})]})),
+    OpsStoreError,
+  );
+  assert.equal(store._db.prepare("SELECT COUNT(*) AS n FROM ops_observations").get().n, 1);
+  store.close();
+});
+
+test("only automatic or human confirmation creates gaps", () => {
+  const store = makeStore();
+  const confirmed = confirmedObservation({observation_id: "obs-auto"});
+  store.recordOutcome(outcomeInput({run_id: "run-1", observations: [coveredObservation(), reviewObservation({observation_id: "obs-review", line: 8}), confirmed]}));
+  const keys = store._db.prepare("SELECT gap_key FROM ops_coverage_gaps ORDER BY gap_key").all().map((row) => row.gap_key);
+  assert.deepEqual(keys, [confirmed.gap_key]);
+  store.close();
+});
+
+test("resolveGap rejects closure without evidence or human decision", () => {
+  const {store, gap_key} = seededOpenGapStore();
+  assert.throws(() => store.resolveGap({gap_key, resolution: "resolved"}), OpsStoreError);
+  assert.equal(store.resolveGap({gap_key, resolution: "resolved", accepted_evidence_ref: "src/Client.kt#Client.call"}).status, "resolved");
+  store.close();
+});
+
+test("loadContext returns a bounded open and stale summary", () => {
+  const store = seededContextStore(60);
+  const result = store.loadContext({scope: {namespace: "ns", logical_repos: ["checkout"]}, objective: "audit coverage", limit: 50});
+  assert.equal(result.gaps.length, 50);
+  assert.ok(result.gaps.every((gap) => gap.status === "open" || gap.status === "stale"));
+  assert.equal(Object.hasOwn(result, "history"), false);
+  store.close();
+});
+
 
 test("divergent insertOrCompareRun throws OpsStoreError not SQLite error", () => {
   const dir = mkdtempSync(join(tmpdir(), "ops-loop-"));

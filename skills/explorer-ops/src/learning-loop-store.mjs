@@ -203,11 +203,24 @@ export function createLearningLoopPersistence(db) {
     if (typeof observed_at !== "string" || observed_at === "") {
       throw new OpsStoreError("observed_at is required for deterministic retry identity");
     }
-    const scope_json = stableStringify(scope);
-    const gaps = db
-      .prepare("SELECT gap_key, status FROM ops_coverage_gaps WHERE scope_json = ? AND status = 'open'")
-      .all(scope_json);
-    for (const g of gaps) {
+    const ns = scope?.namespace ?? null;
+    const runRepos = scope?.logical_repos ?? [];
+    const openGaps = db.prepare("SELECT gap_key, scope_json FROM ops_coverage_gaps WHERE status = 'open'").all();
+    for (const g of openGaps) {
+      let gscope;
+      try {
+        gscope = JSON.parse(g.scope_json);
+      } catch {
+        continue;
+      }
+      if (gscope.namespace !== ns) continue;
+      const gRepos = gscope.logical_repos || [];
+      const intersects = runRepos.some((r) => gRepos.includes(r));
+      if (!intersects) continue;
+      const latestOcc = db
+        .prepare("SELECT source_revision FROM ops_gap_occurrences WHERE gap_key = ? ORDER BY observed_at DESC LIMIT 1")
+        .get(g.gap_key);
+      if (latestOcc && latestOcc.source_revision === source_revision) continue;
       db.prepare("UPDATE ops_coverage_gaps SET status = 'stale' WHERE gap_key = ?").run(g.gap_key);
       appendGapHistory({
         gap_key: g.gap_key,

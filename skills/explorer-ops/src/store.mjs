@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 import { SCHEMA_SQL } from "./schema.mjs";
 import { createLearningLoopPersistence } from "./learning-loop-store.mjs";
+import { createLearningLoopApi } from "./learning-loop-api.mjs";
 
 export class OpsStoreError extends Error {
   /** @param {string} message */
@@ -75,6 +76,7 @@ export function openOpsStore(dbPath) {
   db.exec(SCHEMA_SQL);
   db.exec("PRAGMA foreign_keys = ON;");
   const _learningLoopPersistence = createLearningLoopPersistence(db);
+  const _learningLoopApi = createLearningLoopApi(db, _learningLoopPersistence);
 
   return {
     _db: db,
@@ -178,5 +180,9 @@ export function openOpsStore(dbPath) {
         )
         .all(limit);
     },
+
+    recordOutcome: _learningLoopApi.recordOutcome,
+    loadContext: _learningLoopApi.loadContext,
+    resolveGap: _learningLoopApi.resolveGap,
   };
 }

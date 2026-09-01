@@ -136,3 +136,33 @@ anterior inalterado.
 ### Unverified Projection
 Derivado humano (diagrama, `.explorer/*.md`, relatório). Descartável; nunca é
 entrada factual.
+
+---
+
+## Memória operacional (ADR 0011)
+
+### Journal
+Histórico de ocorrências de run/fase e challenges operacionais. Registra o que
+aconteceu; não transforma uma ocorrência em fato do grafo nem em memória
+consolidada.
+
+### CoverageGap
+Lacuna de cobertura relevante e ainda não resolvida, consolidada a partir do
+Journal. Guarda tentativas e a próxima hipótese; não guarda decisão arbitrária,
+transcrição ou dump de run. Também não é fato do Project Knowledge Graph.
+
+### Escopo e identidade
+Escopo local = `namespace + logical_repo`; cross-service =
+`system_namespace + logical_repos` afetados. A identidade estável combina
+motivo, escopo e alvo e exclui `source_revision`.
+
+### Estado de CoverageGap
+`open`, `stale`, `resolved` ou `superseded`. Nova revisão marca gaps relevantes
+como `stale`. Resolução e substituição exigem evidência aceita ou fechamento
+humano explícito.
+
+### load-context / record-outcome / resolve-gap
+Operações públicas aprovadas para a futura porta de memória. `load-context`
+recupera contexto antes da execução; `record-outcome` registra e consolida o
+resultado de uma fase; `resolve-gap` fecha ou substitui uma lacuna sob as regras
+do estado. Ainda não são comandos implementados.

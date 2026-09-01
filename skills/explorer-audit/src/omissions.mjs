@@ -5,6 +5,7 @@
 
 import { execFileSync } from "node:child_process";
 import { inspectRepoFrontier } from "../../explorer-l1/src/frontier-extract.mjs";
+import { detectObservations, validateObservation, confirmObservation } from "./detect-observations.mjs";
 
 const SKIP_PATH = /(^|\/)(node_modules|vendor|dist|build|target|\.git)(\/|$)|(^|\/)(src\/test\/|src\/tests\/|__tests__\/|test\/)/i;
 

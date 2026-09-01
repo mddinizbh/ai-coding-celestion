@@ -2,15 +2,14 @@
 name: explorer-ops
 description: >
   Playbook operacional do pipeline Explorer (L0 mecânico, Gate, L1) e journal
-  SQLite das runs. Use quando for indexar, quando um finalize/stitch
-  bloquear, ou quando o usuário pedir desafios de runs anteriores.
-  Antes de uma run nova, liste challenges. Depois de cada fase, grave log.
+  SQLite das runs, Observations e CoverageGaps. Use ao indexar, auditar,
+  carregar contexto anterior, registrar outcomes ou resolver gaps.
 ---
 
 # explorer-ops — playbook + journal
 
 Dois trabalhos: **como rodar** (o que esta validação ensinou) e **o que
-guardar** (cada fase vira linha no SQLite, pra próxima sessão ler).
+guardar** (runs, Observations e gaps reutilizáveis pela próxima sessão).
 
 Store: `${XDG_DATA_HOME:-~/.local/share}/descobrir/ops.sqlite` (não o grafo).
 CLI: `node skills/explorer-ops/cli.mjs`.
@@ -23,6 +22,14 @@ node skills/explorer-ops/cli.mjs challenges --limit 20
 
 Leia os `code`s. Se o blocker da run atual já apareceu, use o
 `how_we_attacked` em vez de reinventar.
+
+Para uma auditoria de cobertura, carregue gaps abertos/stale do mesmo escopo:
+
+```bash
+node skills/explorer-ops/cli.mjs load-context \
+  --scope-json '{"namespace":"<ns>","logical_repos":["a"]}' \
+  --objective 'audit coverage' --limit 20
+```
 
 ## Como rodar L0 (volume)
 
@@ -80,3 +87,25 @@ Java/Kotlin. Config-map gaps: subagente `explorer-matcher` (allow-list do indexe
 node skills/explorer-ops/cli.mjs list --namespace uai --limit 20
 node skills/explorer-ops/cli.mjs challenges --code missing_payload
 ```
+
+## Learning loop V1
+
+Grave toda Observation válida de uma run com JSON literal:
+
+```bash
+node skills/explorer-ops/cli.mjs record-outcome \
+  --input-json '{"run":{"run_id":"<run_id>","namespace":"<ns>","phase":"audit","status":"ok","logical_repos":["a"],"source_revision":"<sha>","started_at":"<iso>"},"observations":[...]}'
+```
+
+`NEEDS_REVIEW` permanece no journal e não promove gap. Somente
+`AUTO_CONFIRMED`/`HUMAN_CONFIRMED` criam ocorrência. Resolva um gap apenas com
+evidência relativa aceita ou fechamento humano explícito:
+
+```bash
+node skills/explorer-ops/cli.mjs resolve-gap \
+  --gap-key <gap_key> --resolution resolved \
+  --accepted-evidence-ref 'src/Client.kt#Client.call'
+```
+
+`resolve-gap --resolution superseded` também exige `--replacement-gap-key`.
+Este lifecycle não altera o Human Gate do L0.

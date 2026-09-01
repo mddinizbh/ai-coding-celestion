@@ -5,6 +5,7 @@ import {
   makeObservationId,
   makeGapKey,
 } from "./canonical-observation.mjs";
+import { contractKey, normalizeHttpPath } from "../../explorer-l1/src/path-normalize.mjs";
 
 const SKIP_PATH = /(^|\/)(node_modules|vendor|dist|build|target|\.git)(\/|$)|(^|\/)(src\/test\/|src\/tests\/|__tests__\/|test\/)/i;
 const SOURCE_RE = /\.(kt|java|py|js|ts|go)$/i;
@@ -138,6 +139,7 @@ function extractAnchors(body, file) {
     anchors.push({
       capability: "cross-repo-http",
       fields: { from_logical_repo: "checkout", to_contract_key: contract },
+      methodHint: "GET",
       source_anchor: `${method}`,
       line: body.substring(0, m.index).split("\n").length,
       evidence: m[0].slice(0, 160),
@@ -208,7 +210,13 @@ export function detectObservations(input) {
     if (body === null) continue;
     const decls = extractAnchors(body, file);
     for (const decl of decls) {
-      const toContract = decl.capability === "cross-repo-http" ? normalizeContractKey(decl.fields.to_contract_key) : decl.fields.path || "";
+      let toContract = decl.fields.path || decl.fields.to_contract_key || "";
+      if (decl.capability === "cross-repo-http" && toContract) {
+        const method = decl.methodHint || "GET";
+        toContract = contractKey(method, normalizeHttpPath(toContract));
+      } else if (decl.capability === "cross-repo-http") {
+        toContract = "";
+      }
       const fields = decl.capability === "cross-repo-http"
         ? { from_logical_repo: logical_repo, to_contract_key: toContract }
         : decl.fields;
@@ -249,7 +257,17 @@ export function detectObservations(input) {
         capability: base.capability,
         target_signature: base.target_signature,
       });
-      observations.push(base);
+      const facts = (frontier_report && frontier_report.facts) || [];
+      let processed = validateObservation({ observation: base, frontier_facts: facts });
+      const frontier_complete =
+        !!(frontier_report && frontier_report.source_revision === revision && frontier_report.files_scanned === frontier_report.files_total);
+      processed = confirmObservation({
+        observation: processed,
+        frontier_facts: facts,
+        frontier_complete,
+        repo_path,
+      });
+      observations.push(processed);
     }
   }
   return observations;

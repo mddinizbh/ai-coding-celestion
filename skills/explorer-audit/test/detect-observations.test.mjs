@@ -211,3 +211,31 @@ test("cross-repo-http with empty to_contract_key is UNKNOWN and NEEDS_REVIEW", (
   assert.equal(actual.coverage_classification, "UNKNOWN");
   assert.equal(actual.confirmation_status, "NEEDS_REVIEW");
 });
+
+test("detectObservations applies validate then confirm using frontier_report facts (flow enforcement)", () => {
+  const repo = makeRepo({
+    "src/Client.kt":
+      'class Client {\n  fun fetch() = RestTemplate().getForObject("/invoices/{id}", Invoice::class.java)\n}\n',
+  });
+  const fact = {
+    kind: "http_outbound",
+    namespace: "ns",
+    logical_repo: "checkout",
+    source_revision: repo.head,
+    contract_key: "GET /invoices/{param}",
+    file: "src/Client.kt",
+    line: 40,
+  };
+  const observations = detectObservations({
+    namespace: "ns",
+    run_id: "run-1",
+    repo_path: repo.cwd,
+    revision: repo.head,
+    logical_repo: "checkout",
+    frontier_report: { facts: [fact], files_scanned: 1, files_total: 1, source_revision: repo.head },
+  });
+  const httpObs = observations.find((o) => o.capability === "cross-repo-http");
+  assert.equal(httpObs.coverage_classification, "COVERED");
+  assert.equal(httpObs.confirmation_status, "NOT_APPLICABLE");
+  rmSync(repo.cwd, { recursive: true, force: true });
+});

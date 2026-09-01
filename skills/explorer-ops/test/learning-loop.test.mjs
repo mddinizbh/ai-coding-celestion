@@ -90,3 +90,49 @@ test("projection is rebuilt only from GapOccurrence", () => {
   assert.deepEqual({...gapRow}, {first_seen: "2026-09-01T10:00:00.000Z", last_seen: "2026-09-01T11:00:00.000Z", occurrences: 2});
   store.close();
 });
+
+test("primitives compose inside caller-owned transaction and rollback removes rows", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ops-loop-"));
+  const store = openOpsStore(join(dir, "ops.sqlite"));
+  store.log({run_id: "run-tx", phase: "audit", status: "ok"});
+  const persistence = createLearningLoopPersistence(store._db);
+  const obs = persistedObservation({run_id: "run-tx", observation_id: "obs-tx", observed_at: "2026-09-01T12:00:00.000Z"});
+  store._db.exec("BEGIN IMMEDIATE");
+  try {
+    assert.equal(persistence.insertOrCompareObservation(obs).created, true);
+    const gapKey = makeGapKey({reason: obs.gap_reason, scope: obs.gap_scope, capability: obs.capability, target_signature: obs.target_signature});
+    persistence.ensureCoverageGap({gap_key: gapKey, reason: obs.gap_reason, scope: obs.gap_scope, capability: obs.capability, target_signature: obs.target_signature, observed_at: obs.observed_at});
+    persistence.insertGapOccurrence({run_id: obs.run_id, gap_key: gapKey, observation_id: obs.observation_id, source_revision: obs.source_revision, observed_at: obs.observed_at});
+    const before = store._db.prepare("SELECT COUNT(*) as c FROM ops_observations WHERE run_id = 'run-tx'").get().c;
+    assert.equal(before, 1);
+    store._db.exec("ROLLBACK");
+    const after = store._db.prepare("SELECT COUNT(*) as c FROM ops_observations WHERE run_id = 'run-tx'").get().c;
+    assert.equal(after, 0);
+  } finally {
+    store.close();
+  }
+});
+
+test("divergent insertOrCompareRun throws OpsStoreError not SQLite error", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ops-loop-"));
+  const store = openOpsStore(join(dir, "ops.sqlite"));
+  const persistence = createLearningLoopPersistence(store._db);
+  const run1 = {run_id: "run-div", namespace: "ns", phase: "audit", status: "ok", logical_repos: ["checkout"], source_revision: "rev-a", started_at: "2026-09-01T09:00:00.000Z"};
+  assert.equal(persistence.insertOrCompareRun(run1).created, true);
+  assert.throws(
+    () => persistence.insertOrCompareRun({...run1, source_revision: "rev-b"}),
+    OpsStoreError,
+  );
+  store.close();
+});
+
+test("missing deterministic timestamps are rejected with OpsStoreError", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ops-loop-"));
+  const store = openOpsStore(join(dir, "ops.sqlite"));
+  const persistence = createLearningLoopPersistence(store._db);
+  assert.throws(() => persistence.insertOrCompareRun({run_id: "r1", phase: "p", status: "ok", started_at: ""}), OpsStoreError);
+  const obs = persistedObservation({run_id: "r1", observation_id: "o1"});
+  delete obs.observed_at;
+  assert.throws(() => persistence.insertOrCompareObservation(obs), OpsStoreError);
+  store.close();
+});

@@ -31,39 +31,32 @@ export function createLearningLoopPersistence(db) {
     if (typeof status !== "string" || status === "") {
       throw new OpsStoreError("status is required");
     }
+    if (typeof started_at !== "string" || started_at === "") {
+      throw new OpsStoreError("started_at is required for deterministic retry identity");
+    }
     const detail_json = stableStringify({ source_revision: source_revision ?? null });
     const logical_repos_json = logical_repos ? JSON.stringify(logical_repos) : null;
-    const now = started_at || new Date().toISOString();
-    db.exec("BEGIN IMMEDIATE");
-    try {
-      const existing = db.prepare(
-        "SELECT namespace, phase, status, logical_repos, detail_json, started_at FROM ops_runs WHERE run_id = ?",
-      ).get(run_id);
-      if (existing) {
-        const match =
-          existing.namespace === (namespace ?? null) &&
-          existing.phase === phase &&
-          existing.status === status &&
-          existing.logical_repos === logical_repos_json &&
-          existing.detail_json === detail_json &&
-          existing.started_at === now;
-        if (match) {
-          db.exec("COMMIT");
-          return { created: false };
-        }
-        db.exec("ROLLBACK");
-        throw new OpsStoreError(`divergent run for ${run_id}`);
+    const existing = db.prepare(
+      "SELECT namespace, phase, status, logical_repos, detail_json, started_at FROM ops_runs WHERE run_id = ?",
+    ).get(run_id);
+    if (existing) {
+      const match =
+        existing.namespace === (namespace ?? null) &&
+        existing.phase === phase &&
+        existing.status === status &&
+        existing.logical_repos === logical_repos_json &&
+        existing.detail_json === detail_json &&
+        existing.started_at === started_at;
+      if (match) {
+        return { created: false };
       }
-      db.prepare(
-        `INSERT INTO ops_runs (run_id, started_at, namespace, phase, status, logical_repos, detail_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(run_id, now, namespace ?? null, phase, status, logical_repos_json, detail_json, now);
-      db.exec("COMMIT");
-      return { created: true };
-    } catch (e) {
-      db.exec("ROLLBACK");
-      throw e;
+      throw new OpsStoreError(`divergent run for ${run_id}`);
     }
+    db.prepare(
+      `INSERT INTO ops_runs (run_id, started_at, namespace, phase, status, logical_repos, detail_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(run_id, started_at, namespace ?? null, phase, status, logical_repos_json, detail_json, started_at);
+    return { created: true };
   }
 
   function insertOrCompareObservation(observation) {
@@ -95,10 +88,11 @@ export function createLearningLoopPersistence(db) {
       gap_scope: observation.gap_scope ?? null,
       gap_key: observation.gap_key ?? null,
     };
+    if (typeof observation.observed_at !== "string" || observation.observed_at === "") {
+      throw new OpsStoreError("observed_at is required for deterministic retry identity");
+    }
     const canonical_payload_json = stableStringify(payloadObj);
     const canonical_payload_hash = sha256Text(canonical_payload_json);
-    const created_at = observation.observed_at || new Date().toISOString();
-    // check outside tx to avoid spurious commit/rollback on read-only path
     const existing = db
       .prepare("SELECT canonical_payload_json FROM ops_observations WHERE run_id = ? AND observation_id = ?")
       .get(observation.run_id, observation.observation_id);
@@ -108,85 +102,66 @@ export function createLearningLoopPersistence(db) {
       }
       throw new OpsStoreError(`divergent observation payload for ${observation.run_id}/${observation.observation_id}`);
     }
-    db.exec("BEGIN IMMEDIATE");
-    try {
-      db.prepare(
-        `INSERT INTO ops_observations (
-          run_id, observation_id, capability, signal_key_json, target_signature,
-          logical_repo, relative_file, source_anchor, source_revision, line,
-          evidence_snippet, coverage_classification, confirmation_status,
-          gap_reason, gap_scope_json, gap_key,
-          canonical_payload_json, canonical_payload_hash, created_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ).run(
-        observation.run_id,
-        observation.observation_id,
-        observation.capability,
-        signal_key_json,
-        observation.target_signature,
-        observation.logical_repo,
-        observation.relative_file,
-        observation.source_anchor,
-        observation.source_revision,
-        observation.line,
-        observation.evidence_snippet,
-        observation.coverage_classification,
-        observation.confirmation_status,
-        observation.gap_reason ?? null,
-        gap_scope_json,
-        observation.gap_key ?? null,
-        canonical_payload_json,
-        canonical_payload_hash,
-        created_at,
-      );
-      db.exec("COMMIT");
-      return { created: true };
-    } catch (e) {
-      db.exec("ROLLBACK");
-      if (e instanceof OpsStoreError) throw e;
-      throw e;
-    }
+    db.prepare(
+      `INSERT INTO ops_observations (
+        run_id, observation_id, capability, signal_key_json, target_signature,
+        logical_repo, relative_file, source_anchor, source_revision, line,
+        evidence_snippet, coverage_classification, confirmation_status,
+        gap_reason, gap_scope_json, gap_key,
+        canonical_payload_json, canonical_payload_hash, created_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      observation.run_id,
+      observation.observation_id,
+      observation.capability,
+      signal_key_json,
+      observation.target_signature,
+      observation.logical_repo,
+      observation.relative_file,
+      observation.source_anchor,
+      observation.source_revision,
+      observation.line,
+      observation.evidence_snippet,
+      observation.coverage_classification,
+      observation.confirmation_status,
+      observation.gap_reason ?? null,
+      gap_scope_json,
+      observation.gap_key ?? null,
+      canonical_payload_json,
+      canonical_payload_hash,
+      observation.observed_at,
+    );
+    return { created: true };
   }
 
   function ensureCoverageGap({ gap_key, reason, scope, capability, target_signature, observed_at }) {
+    if (typeof observed_at !== "string" || observed_at === "") {
+      throw new OpsStoreError("observed_at is required for deterministic retry identity");
+    }
     const computed = makeGapKey({ reason, scope, capability, target_signature });
     if (computed !== gap_key) {
       throw new OpsStoreError("gap_key does not match recomputed value");
     }
     const scope_json = stableStringify(scope);
-    const now = new Date().toISOString();
-    const first_seen = observed_at || now;
-    db.exec("BEGIN IMMEDIATE");
-    try {
-      db.prepare(
-        `INSERT OR IGNORE INTO ops_coverage_gaps (
-          gap_key, reason, scope_json, capability, target_signature, status,
-          first_seen, last_seen, occurrences, created_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      ).run(gap_key, reason, scope_json, capability, target_signature, "open", first_seen, first_seen, 0, now);
-      db.exec("COMMIT");
-    } catch (e) {
-      db.exec("ROLLBACK");
-      throw e;
-    }
+    db.prepare(
+      `INSERT OR IGNORE INTO ops_coverage_gaps (
+        gap_key, reason, scope_json, capability, target_signature, status,
+        first_seen, last_seen, occurrences, created_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    ).run(gap_key, reason, scope_json, capability, target_signature, "open", observed_at, observed_at, 0, observed_at);
   }
 
   function insertGapOccurrence({ run_id, gap_key, observation_id, source_revision, observed_at }) {
-    const now = observed_at || new Date().toISOString();
-    db.exec("BEGIN IMMEDIATE");
-    try {
-      const info = db
-        .prepare(
-          `INSERT OR IGNORE INTO ops_gap_occurrences (run_id, gap_key, observation_id, source_revision, observed_at)
-           VALUES (?,?,?,?,?)`,
-        )
-        .run(run_id, gap_key, observation_id, source_revision, now);
-      db.exec("COMMIT");
-      return { created: info.changes > 0 };
-    } catch (e) {
-      db.exec("ROLLBACK");
-      throw e;
+    if (typeof observed_at !== "string" || observed_at === "") {
+      throw new OpsStoreError("observed_at is required for deterministic retry identity");
     }
+    const info = db
+      .prepare(
+        `INSERT OR IGNORE INTO ops_gap_occurrences (run_id, gap_key, observation_id, source_revision, observed_at)
+         VALUES (?,?,?,?,?)`,
+      )
+      .run(run_id, gap_key, observation_id, source_revision, observed_at);
+    return { created: info.changes > 0 };
   }
 
   function rebuildGapProjection(gap_key) {
@@ -214,15 +189,20 @@ export function createLearningLoopPersistence(db) {
     evidence_ref,
     created_at,
   }) {
-    const now = created_at || new Date().toISOString();
+    if (typeof created_at !== "string" || created_at === "") {
+      throw new OpsStoreError("created_at is required for deterministic retry identity");
+    }
     db.prepare(
       `INSERT INTO ops_gap_status_history (
         gap_key, run_id, from_status, to_status, source_revision, transition_reason, evidence_ref, created_at
       ) VALUES (?,?,?,?,?,?,?,?)`,
-    ).run(gap_key, run_id ?? null, from_status ?? null, to_status, source_revision ?? null, transition_reason, evidence_ref ?? null, now);
+    ).run(gap_key, run_id ?? null, from_status ?? null, to_status, source_revision ?? null, transition_reason, evidence_ref ?? null, created_at);
   }
 
   function markAffectedGapsStale({ run_id, scope, source_revision, observed_at }) {
+    if (typeof observed_at !== "string" || observed_at === "") {
+      throw new OpsStoreError("observed_at is required for deterministic retry identity");
+    }
     const scope_json = stableStringify(scope);
     const gaps = db
       .prepare("SELECT gap_key, status FROM ops_coverage_gaps WHERE scope_json = ? AND status = 'open'")
@@ -246,12 +226,14 @@ export function createLearningLoopPersistence(db) {
     return db.prepare("SELECT * FROM ops_coverage_gaps WHERE gap_key = ?").get(gap_key) || null;
   }
 
-  function updateGapStatus({ gap_key, expected_statuses, to_status }) {
+  function updateGapStatus({ gap_key, expected_statuses, to_status, created_at }) {
     const current = getCoverageGap(gap_key);
     if (!current || !expected_statuses.includes(current.status)) {
       throw new OpsStoreError("unexpected status");
     }
-    const now = new Date().toISOString();
+    if (typeof created_at !== "string" || created_at === "") {
+      throw new OpsStoreError("created_at is required for deterministic retry identity");
+    }
     db.prepare("UPDATE ops_coverage_gaps SET status = ? WHERE gap_key = ?").run(to_status, gap_key);
     appendGapHistory({
       gap_key,
@@ -261,7 +243,7 @@ export function createLearningLoopPersistence(db) {
       source_revision: null,
       transition_reason: "manual-update",
       evidence_ref: null,
-      created_at: now,
+      created_at,
     });
   }
 

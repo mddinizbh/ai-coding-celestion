@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { listSystemEdges, openSystemStore } from "../explorer-l1/src/system-store.mjs";
+import { inspectRepoFrontier } from "../explorer-l1/src/frontier-extract.mjs";
+import { detectObservations } from "./src/detect-observations.mjs";
 import { sampleEdges } from "./src/sample.mjs";
 import { scanOmissions } from "./src/omissions.mjs";
 import { showPinned } from "./src/show.mjs";
@@ -97,6 +99,33 @@ export function main(argv) {
         const result = scanOmissions({ namespace, repos });
         process.stdout.write(
           `${JSON.stringify({ status: "ok", namespace, ...result }, null, 2)}\n`,
+        );
+        return 0;
+      }
+      case "observations": {
+        const namespace = req(flags, "namespace");
+        const runId = req(flags, "run-id");
+        const revision = req(flags, "revision");
+        const repos = parseRepos(req(flags, "repos"));
+        const observations = [];
+        for (const repo of repos) {
+          const frontierReport = inspectRepoFrontier({
+            repoPath: repo.repo_path,
+            revision,
+            namespace,
+            logical_repo: repo.logical_repo,
+          });
+          observations.push(...detectObservations({
+            namespace,
+            run_id: runId,
+            repo_path: repo.repo_path,
+            revision,
+            logical_repo: repo.logical_repo,
+            frontier_report: frontierReport,
+          }));
+        }
+        process.stdout.write(
+          `${JSON.stringify({ status: "ok", namespace, run_id: runId, observations }, null, 2)}\n`,
         );
         return 0;
       }

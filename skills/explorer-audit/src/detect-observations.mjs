@@ -45,203 +45,183 @@ function gitShow(repoPath, revision, path) {
   }
 }
 
-// Detectors: parse pinned source bytes for capability signals. Feign precedence over Controller.
-// Prevent duplicate java-call for framework patterns already classified as spring/http/kafka.
-// Produce exact anchors required: Client#call, Client#ambiguous, OrderController#get, OrderController#ambiguous,
-// BillingClient#get, BillingClient#ambiguous, InvoiceClient#covered, InvoiceClient#missing, InvoiceClient#dynamic,
-// EventBus#consume, EventBus#ambiguous.
+function lineNumber(body, index) {
+  return body.slice(0, index).split("\n").length;
+}
 
-// Global regex architecture DELETED per prerequisite. Bounded type->method->intra-method below.
+function findMatchingBrace(body, openIndex) {
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  for (let index = openIndex; index < body.length; index += 1) {
+    const char = body[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === quote) quote = "";
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "{") depth += 1;
+    if (char === "}" && --depth === 0) return index + 1;
+  }
+  return body.length;
+}
 
 function collectTypes(body) {
   const types = [];
-  const typeRe = /(@FeignClient\s*\([^)]*\)|@RestController|@Controller)[\s\S]*?(?:interface|class)\s+(\w+)/g;
-  let m;
-  while ((m = typeRe.exec(body)) !== null) {
-    const anno = m[1];
-    const name = m[2];
-    const start = m.index;
-    let end = body.length;
-    const nexts = [body.indexOf('@FeignClient', start + 20), body.indexOf('@RestController', start + 20), body.indexOf('@Controller', start + 20)].filter(x => x > 0);
-    if (nexts.length) end = Math.min(...nexts);
-    types.push({ name, anno, start, end, slice: body.slice(start, end) });
+  const declaration = /(?:^|\n)((?:[ \t]*@[^\n]+\n)*)[ \t]*(?:(?:public|private|protected|internal|abstract|final|open|data|sealed|static)\s+)*(?:class|interface)\s+(\w+)[^{\n]*\{/g;
+  let match;
+  while ((match = declaration.exec(body)) !== null) {
+    const openIndex = declaration.lastIndex - 1;
+    const start = match.index + (match[0].startsWith("\n") ? 1 : 0);
+    const end = findMatchingBrace(body, openIndex);
+    types.push({
+      name: match[2],
+      annotations: match[1],
+      bodyStart: openIndex + 1,
+      bodyEnd: end - 1,
+      start,
+    });
+    declaration.lastIndex = end;
   }
   return types;
 }
 
-function collectMethods(typeSlice) {
-  const methods = [];
-  const methodRe = /(@(?:Get|Post|Put|Delete|Patch|Request)Mapping\s*\(\s*["']([^"']+)["'][^)]*\)|@KafkaListener\s*\([^)]*topics\s*=\s*["']([^"']+)["'][^)]*\))[\s\S]*?(?:fun|def|public|private|protected|\s)*\s*(\w+)\s*\(/g;
-  let m;
-  while ((m = methodRe.exec(typeSlice)) !== null) {
-    const annoPart = m[1];
-    const pathOrTopic = m[2] || m[3];
-    const methodName = m[4];
-    methods.push({ methodName, annoPart, pathOrTopic, slice: m[0] });
+function collectMethodDeclarations(typeBody, bodyOffset) {
+  const declarations = [];
+  const patterns = [
+    /(?:^|\n)((?:[ \t]*@[^\n]+\n)*)[ \t]*(?:(?:public|private|protected|internal|open|final|abstract|override|suspend|inline|operator|infix|tailrec|external)\s+)*fun\s+(\w+)\s*\([^)]*\)[^\n{=]*(?:\{|=|$)/gm,
+    /(?:^|\n)((?:[ \t]*@[^\n]+\n)*)[ \t]*(?:(?:public|private|protected|static|final|abstract|synchronized|native|default)\s+)*(?:[\w$<>\[\],.?]+\s+)+(\w+)\s*\([^)]*\)\s*(?:throws\s+[^\n{;]+)?(?:\{|;|$)/gm,
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(typeBody)) !== null) {
+      const relativeStart = match.index + (match[0].startsWith("\n") ? 1 : 0);
+      declarations.push({
+        name: match[2],
+        annotations: match[1],
+        start: bodyOffset + relativeStart,
+        signatureEnd: bodyOffset + pattern.lastIndex,
+      });
+    }
   }
-  const callRe = /(RestTemplate|WebClient|RestClient)\s*\.\s*(getForObject|getForEntity|exchange|postForObject)\s*\(\s*["']([^"']+)["'][^)]*\)/g;
-  while ((m = callRe.exec(typeSlice)) !== null) {
-    methods.push({ methodName: 'call', annoPart: null, pathOrTopic: m[3], slice: m[0], isCall: true });
-  }
-  return methods;
+  declarations.sort((left, right) => left.start - right.start);
+  return declarations.filter((item, index) => index === 0 || item.start !== declarations[index - 1].start);
 }
 
-function extractSignalsFromMethod(meth, typeName, typeAnno) {
+function collectMethods(body, type) {
+  const typeBody = body.slice(type.bodyStart, type.bodyEnd);
+  const declarations = collectMethodDeclarations(typeBody, type.bodyStart);
+  return declarations.map((declaration, index) => {
+    const nextStart = declarations[index + 1]?.start ?? type.bodyEnd;
+    const signature = body.slice(declaration.start, Math.min(declaration.signatureEnd, nextStart));
+    const openOffset = signature.indexOf("{");
+    const end = openOffset < 0
+      ? nextStart
+      : Math.min(findMatchingBrace(body, declaration.start + openOffset), nextStart);
+    return {
+      ...declaration,
+      end,
+      slice: body.slice(declaration.start, end),
+    };
+  });
+}
+
+function quotedValue(raw) {
+  const match = raw.trim().match(/^(["'])(.*?)\1$/);
+  return match ? match[2] : "";
+}
+
+function signal(type, method, match, capability, fields, extra = {}) {
+  const absoluteIndex = method.start + match.index;
+  return {
+    capability,
+    fields,
+    source_anchor: `${type.name}#${method.name}`,
+    line: lineNumber(extra.body, absoluteIndex),
+    evidence: method.slice.slice(match.index, match.index + match[0].length).slice(0, 160),
+    ...extra.output,
+  };
+}
+
+function extractSignals(body, type, method) {
   const signals = [];
-  const isFeignType = typeAnno && typeAnno.includes('@FeignClient');
-  const isCtrlType = typeAnno && (typeAnno.includes('@RestController') || typeAnno.includes('@Controller'));
-  if (isFeignType && meth.annoPart && meth.annoPart.includes('Mapping')) {
-    const path = meth.pathOrTopic;
-    signals.push({ capability: 'spring-feign', fields: { client: typeName, method: path, path }, source_anchor: `${typeName}#${meth.methodName}`, line: 1, evidence: meth.slice.slice(0, 160) });
-  } else if ((isCtrlType || !isFeignType) && meth.annoPart && meth.annoPart.includes('Mapping')) {
-    const path = meth.pathOrTopic;
-    const ann = meth.annoPart.match(/@(Get|Post|Put|Delete|Patch|Request)Mapping/)[0];
-    signals.push({ capability: 'spring-controller', fields: { annotation: ann, path, method: meth.methodName }, source_anchor: `${typeName}#${meth.methodName}`, line: 1, evidence: meth.slice.slice(0, 160) });
-  } else if (meth.annoPart && meth.annoPart.includes('KafkaListener')) {
-    const topic = meth.pathOrTopic;
-    signals.push({ capability: 'kafka', fields: { topic, direction: 'in', client: 'listener' }, source_anchor: `${typeName}#${meth.methodName}`, line: 1, evidence: meth.slice.slice(0, 160) });
-  } else if (meth.isCall) {
-    const ck = contractKey('GET', meth.pathOrTopic);
-    const complete = !!(meth.pathOrTopic && meth.pathOrTopic.trim() && !meth.pathOrTopic.includes('$'));
-    signals.push({ capability: 'cross-repo-http', fields: { from_logical_repo: 'checkout', to_contract_key: ck }, source_anchor: `${typeName}#${meth.methodName}`, line: 1, evidence: meth.slice.slice(0, 160), coverage_classification: complete ? 'POSSIBLE_OMISSION' : 'UNKNOWN' });
+  const mapping = method.slice.match(/@(Get|Post|Put|Delete|Patch|Request)Mapping\s*(?:\(([^)]*)\))?/);
+  if (mapping) {
+    const kind = mapping[1];
+    const args = mapping[2] ?? "";
+    const pathMatch = args.match(/(?:value|path)\s*=\s*(["'][^"']*["'])/) ?? args.match(/(["'][^"']*["'])/);
+    const path = pathMatch ? quotedValue(pathMatch[1]) : "";
+    if (type.annotations.includes("@FeignClient")) {
+      signals.push(signal(type, method, mapping, "spring-feign", {
+        client: type.name,
+        method: kind === "Request" ? "" : kind.toUpperCase(),
+        path,
+      }, { body }));
+    } else {
+      signals.push(signal(type, method, mapping, "spring-controller", {
+        annotation: kind === "Request" ? "" : `${kind}Mapping`,
+        path,
+        method: method.name,
+      }, { body }));
+    }
+  }
+
+  const listener = method.slice.match(/@KafkaListener\s*\(([^)]*)\)/);
+  if (listener) {
+    const topicMatch = listener[1].match(/topics\s*=\s*(?:\[\s*)?(["'][^"']*["'])/);
+    signals.push(signal(type, method, listener, "kafka", {
+      topic: topicMatch ? quotedValue(topicMatch[1]) : "",
+      direction: "in",
+      client: "listener",
+    }, { body }));
+  }
+
+  const httpCall = /\b(RestTemplate|WebClient|RestClient)(?:\s*\(\s*\))?\s*\.\s*(getForObject|getForEntity|exchange|postForObject)\s*\(\s*([^,\n)]*)/g;
+  let match;
+  while ((match = httpCall.exec(method.slice)) !== null) {
+    const path = quotedValue(match[3]);
+    const httpMethod = match[2].startsWith("post") ? "POST" : "GET";
+    signals.push(signal(type, method, match, "cross-repo-http", {
+      from_logical_repo: "",
+      to_contract_key: path,
+    }, { body, output: { methodHint: httpMethod } }));
+  }
+
+  const kafkaSend = /\bKafkaTemplate(?:\s*<[^>]+>)?(?:\s*\(\s*\))?\s*\.\s*send\s*\(\s*([^,\n)]*)/g;
+  while ((match = kafkaSend.exec(method.slice)) !== null) {
+    signals.push(signal(type, method, match, "kafka", {
+      topic: quotedValue(match[1]),
+      direction: "out",
+      client: "template",
+    }, { body }));
+  }
+
+  const javaCall = /\b([A-Z]\w*)\s*\.\s*([a-z]\w*)\s*\(([^)]*)\)/g;
+  const frameworkClasses = new Set(["RestTemplate", "WebClient", "RestClient", "KafkaTemplate"]);
+  while ((match = javaCall.exec(method.slice)) !== null) {
+    if (frameworkClasses.has(match[1])) continue;
+    signals.push(signal(type, method, match, "java-call", {
+      class: match[1],
+      method: match[2],
+      params: match[3].trim(),
+    }, { body }));
   }
   return signals;
 }
 
-function extractAnchors(body, file) {
-  const anchors = [];
-  let types = collectTypes(body);
-  if (types.length === 0) {
-    // fallback for loose calls in plain class (flow test fixture and bound test)
-    const classMatch = body.match(/class\s+(\w+)/);
-    const fallbackName = classMatch ? classMatch[1] : 'Unknown';
-    types = [{ name: fallbackName, anno: '', start: 0, end: body.length, slice: body }];
-  }
-  for (const t of types) {
-    const methods = collectMethods(t.slice);
-    for (const meth of methods) {
-      const sigs = extractSignalsFromMethod(meth, t.name, t.anno);
-      anchors.push(...sigs);
+function extractAnchors(body) {
+  const signals = [];
+  for (const type of collectTypes(body)) {
+    for (const method of collectMethods(body, type)) {
+      signals.push(...extractSignals(body, type, method));
     }
   }
-  return anchors;
-}
-
-function _oldExtractAnchors_DISABLED(body, file) {
-  const anchors = [];
-  // Feign first (precedence)
-  let m;
-  while ((m = FEIGN_DECL_RE.exec(body)) !== null) {
-    const client = m[1];
-    const path = m[2];
-    const method = m[3];
-    anchors.push({
-      capability: "spring-feign",
-      fields: { client, method: path, path },
-      source_anchor: `${client}#${method}`,
-      line: body.substring(0, m.index).split("\n").length,
-      evidence: m[0].slice(0, 160),
-    });
-  }
-  // Controller collected independently (per-type precedence enforced by bounded extraction in final impl)
-  while ((m = CONTROLLER_DECL_RE.exec(body)) !== null) {
-    const ctrl = m[1];
-    const path = m[2];
-    const method = m[3];
-    anchors.push({
-      capability: "spring-controller",
-      fields: { annotation: "GetMapping", path, method },
-      source_anchor: `${ctrl}#${method}`,
-      line: body.substring(0, m.index).split("\n").length,
-      evidence: m[0].slice(0, 160),
-    });
-  }
-  // Kafka
-  while ((m = KAFKA_LISTENER_RE.exec(body)) !== null) {
-    const topic = m[1];
-    const method = m[2];
-    anchors.push({
-      capability: "kafka",
-      fields: { topic, direction: "in", client: "listener" },
-      source_anchor: `${method}`,
-      line: body.substring(0, m.index).split("\n").length,
-      evidence: m[0].slice(0, 160),
-    });
-  }
-  while ((m = KAFKA_TEMPLATE_RE.exec(body)) !== null) {
-    const topic = m[1];
-    const method = m[2];
-    anchors.push({
-      capability: "kafka",
-      fields: { topic, direction: "out", client: "template" },
-      source_anchor: `${method}`,
-      line: body.substring(0, m.index).split("\n").length,
-      evidence: m[0].slice(0, 160),
-    });
-  }
-  // HTTP calls (cross-repo-http candidate)
-  while ((m = HTTP_CALL_RE.exec(body)) !== null) {
-    const contract = m[1];
-    const method = m[2] || "call";
-    const ck = contractKey("GET", contract);
-    anchors.push({
-      capability: "cross-repo-http",
-      fields: { from_logical_repo: "checkout", to_contract_key: ck },
-      methodHint: "GET",
-      source_anchor: `${method}`,
-      line: body.substring(0, m.index).split("\n").length,
-      evidence: m[0].slice(0, 160),
-    });
-  }
-  // Axios / python similar minimal
-  while ((m = AXIOS_RE.exec(body)) !== null) {
-    const contract = m[1];
-    const method = m[2] || m[3] || "call";
-    anchors.push({
-      capability: "cross-repo-http",
-      fields: { from_logical_repo: "checkout", to_contract_key: contract },
-      source_anchor: `${method}`,
-      line: body.substring(0, m.index).split("\n").length,
-      evidence: m[0].slice(0, 160),
-    });
-  }
-  while ((m = PYTHON_HTTP_RE.exec(body)) !== null || (m = PYTHON_FASTAPI_RE.exec(body)) !== null) {
-    if (m) {
-      const contract = m[1];
-      const method = m[2];
-      anchors.push({
-        capability: "cross-repo-http",
-        fields: { from_logical_repo: "checkout", to_contract_key: contract },
-        source_anchor: `${method}`,
-        line: body.substring(0, m.index).split("\n").length,
-        evidence: m[0].slice(0, 160),
-      });
-    }
-  }
-  // java-call only for non-framework (prevent duplicate)
-  const isFramework = (line) =>
-    /@FeignClient|@(?:Get|Post)Mapping|RestTemplate|WebClient|Kafka|axios|requests|httpx/.test(line);
-  while ((m = JAVA_CALL_RE.exec(body)) !== null) {
-    const cls = m[1];
-    const method = m[2];
-    const lineText = body.substring(m.index, m.index + 200);
-    if (!isFramework(lineText)) {
-      anchors.push({
-        capability: "java-call",
-        fields: { class: cls, method, params: "" },
-        source_anchor: `${cls}#${method}`,
-        line: body.substring(0, m.index).split("\n").length,
-        evidence: m[0].slice(0, 160),
-      });
-    }
-  }
-  return anchors;
-}
-
-function normalizeContractKey(raw) {
-  // minimal normalization for contract key (path + method if present)
-  if (!raw) return "";
-  return raw.replace(/\{[^}]+\}/g, "{param}").trim();
+  return signals;
 }
 
 /**
@@ -328,7 +308,7 @@ export function detectObservations(input) {
 export function validateObservation(input) {
   const { observation, frontier_facts } = input;
   if (observation.capability !== "cross-repo-http") {
-    return { ...observation, coverage_classification: "UNKNOWN", confirmation_status: "NEEDS_REVIEW" };
+    return { ...observation, confirmation_status: "NEEDS_REVIEW" };
   }
   const contract = observation.signal_key.fields.to_contract_key;
   if (!contract || contract.trim() === "") {
@@ -343,6 +323,7 @@ export function validateObservation(input) {
   // line proximity only for MAYBE, never auto-confirm
   const near = frontier_facts.some(
     (f) =>
+      f.logical_repo === observation.logical_repo &&
       f.file === observation.relative_file &&
       Math.abs(Number(f.line) - observation.line) <= 5 &&
       f.contract_key !== contract
@@ -364,6 +345,9 @@ export function confirmObservation(input) {
   }
   if (!frontier_complete) {
     return { ...observation, confirmation_status: "NEEDS_REVIEW" };
+  }
+  if (observation.coverage_classification !== "POSSIBLE_OMISSION") {
+    return observation;
   }
   // must reproduce from pinned bytes
   const body = gitShow(repo_path, observation.source_revision, observation.relative_file);
@@ -387,7 +371,9 @@ export function confirmObservation(input) {
   }
   // semantic absence only if no matching fact and frontier complete + files match (assume caller ensures)
   const hasFact = frontier_facts.some(
-    (f) => f.contract_key === observation.signal_key.fields.to_contract_key
+    (f) =>
+      f.logical_repo === observation.logical_repo &&
+      f.contract_key === observation.signal_key.fields.to_contract_key
   );
   if (hasFact) {
     return { ...observation, coverage_classification: "COVERED", confirmation_status: "NOT_APPLICABLE" };

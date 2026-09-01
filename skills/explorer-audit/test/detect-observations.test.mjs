@@ -125,6 +125,56 @@ test("line proximity without target signature is MAYBE_COVERED and NEEDS_REVIEW"
   assert.equal(actual.confirmation_status, "NEEDS_REVIEW");
 });
 
+test("confirmation never promotes a MAYBE_COVERED proximity match", () => {
+  const repo = makeRepo({
+    "src/Client.kt":
+      'class Client {\n  fun fetch() = RestTemplate().getForObject("/invoices/{id}", Invoice::class.java)\n}\n',
+  });
+  const observation = crossRepoObservation({ line: 2, source_revision: repo.head });
+  const nearFact = {
+    kind: "http_outbound",
+    logical_repo: "checkout",
+    contract_key: "POST /other",
+    file: observation.relative_file,
+    line: 3,
+  };
+  const validated = validateObservation({ observation, frontier_facts: [nearFact] });
+  const confirmed = confirmObservation({
+    observation: validated,
+    frontier_facts: [nearFact],
+    frontier_complete: true,
+    repo_path: repo.cwd,
+  });
+  assert.equal(confirmed.coverage_classification, "MAYBE_COVERED");
+  assert.equal(confirmed.confirmation_status, "NEEDS_REVIEW");
+  rmSync(repo.cwd, { recursive: true, force: true });
+});
+
+test("semantic confirmation matches logical_repo together with contract_key", () => {
+  const repo = makeRepo({
+    "src/Client.kt":
+      'class Client {\n  fun fetch() = RestTemplate().getForObject("/invoices/{id}", Invoice::class.java)\n}\n',
+  });
+  const observation = crossRepoObservation({ line: 2, source_revision: repo.head });
+  const otherRepoFact = {
+    kind: "http_outbound",
+    logical_repo: "billing",
+    contract_key: observation.signal_key.fields.to_contract_key,
+    file: "src/Other.kt",
+    line: 20,
+  };
+  const validated = validateObservation({ observation, frontier_facts: [otherRepoFact] });
+  const confirmed = confirmObservation({
+    observation: validated,
+    frontier_facts: [otherRepoFact],
+    frontier_complete: true,
+    repo_path: repo.cwd,
+  });
+  assert.equal(confirmed.coverage_classification, "POSSIBLE_OMISSION");
+  assert.equal(confirmed.confirmation_status, "AUTO_CONFIRMED");
+  rmSync(repo.cwd, { recursive: true, force: true });
+});
+
 test("complete cross-repo semantic absence is AUTO_CONFIRMED", () => {
   const repo = makeRepo({
     "src/Client.kt":

@@ -11,86 +11,54 @@ O journal (`explorer-ops`) registra runs e challenges operacionais. O Project Kn
 O plano de store compartilhado menciona journal remoto. CoverageGap é a
 consolidação de falhas de cobertura relevantes para reuso sem reexecução cega.
 
-Hoje, `explorer-ops` expõe apenas `log`, `list` e `challenges`. O indexer grava
-`finalize`; o auditor grava `audit`; o SQLite local recusa de forma transacional
-caminho absoluto, hostname e material com segredo. `load-context`,
-`record-outcome` e `resolve-gap` ainda não existem.
+Hoje, `explorer-ops` expõe Journal com Observation e GapOccurrence. As operações públicas `load-context`, `record-outcome` e `resolve-gap` estão implementadas na porta de memória V1.
 
 ## Decisão
 
-Aprovar três operações públicas para a futura porta de memória de CoverageGap.
-Elas não são comandos implementados nesta decisão. O ciclo é:
+Aprovar e registrar as três operações públicas implementadas na porta de memória V1:
 
-1. `load-context(scope, objective)` — antes da execução.
+1. `load-context(scope, objective)` — recupera contexto de CoverageGap antes da execução.
 2. Agente executa fluxo L0/L1/audit normal (inalterado).
-3. `record-outcome(run, phase, observations)` — após fase.
-4. `resolve-gap(gap_id, resolution)` — somente com evidência aceita ou
-   fechamento humano explícito.
+3. `record-outcome({run, observations})` — persiste toda Observation válida (phase dentro de run); apenas AUTO_CONFIRMED/HUMAN_CONFIRMED criam/atualizam CoverageGap via GapOccurrence.
+4. `resolve-gap(gap_key, resolution)` — somente com evidência aceita ou fechamento humano explícito.
 
-Os microsteps ficam escondidos atrás das operações públicas:
+Observation usa dois eixos independentes: `coverage_classification` (COVERED | MAYBE_COVERED | POSSIBLE_OMISSION | UNKNOWN) e `confirmation_status` (NOT_APPLICABLE | AUTO_CONFIRMED | NEEDS_REVIEW | HUMAN_CONFIRMED | REJECTED). Identidade estável: `observation_id = hash(capability + canonical_signal + source_evidence_identity)`; `gap_key = reason + scope + capability + target_signature`.
 
-- `load-context`: `select-open-gaps`, `rank-gaps`, `build-memory-context`.
-- `record-outcome`: `append-journal-entry`, `classify-observations`,
-  `decide-promotion`, `identify-gap`, `upsert-gap`, `reconcile-gap`.
+GapOccurrence registra evidência por run (`UNIQUE(run_id, gap_key)`). V1 auto-confirmação restrita a cross-repo-http totalmente comprovado (quatro predicados da spec). Proximidade de linha nunca promove automático.
 
-Agentes não invocam avaliação, promoção ou persistência separadamente e não
-importam clientes Oracle ou Mongo.
+Separação explícita: revisão de CoverageGap é independente do Human Gate do baseline L0. Um não afeta o outro.
+
+Todas as Observations válidas persistem no Journal. Somente AUTO_CONFIRMED/HUMAN_CONFIRMED promovem gaps.
 
 ## Vocabulário
 
-- **Journal**: registra toda ocorrência de run/fase e challenge operacional. É
-  a fonte de recuperação quando a consolidação precisa ser refeita.
+- **Journal**: registra runs/fases e challenges operacionais + toda Observation válida (`UNIQUE(run_id, observation_id)`). Fonte de recuperação para reconstrução/retry idempotente; não transforma ocorrência em fato do grafo. Nenhuma atomicidade assumida entre stores distintos.
+- **Observation**: registro de detecção com dois eixos (`coverage_classification`, `confirmation_status`), `observation_id` estável, `signal_key`, `target_signature` e evidência.
+- **GapOccurrence**: evidência por run (`run_id`, `gap_key`, `observation_id`; `UNIQUE(run_id, gap_key)`). Primeira Observation confirmada cria; equivalentes posteriores ficam no Journal.
+- **CoverageGap**: deficiência durável consolidada. `gap_key` UNIQUE (razão + escopo + capability + target_signature). Campos: reason, scope, capability, target_signature, status, first_seen, last_seen, occurrences. Revisões pertencem ao histórico.
 - **Project Knowledge Graph**: fatos com evidência aceita (Human Gate). Nunca armazena CoverageGap.
-- **CoverageGap**: consolida falhas de cobertura relevantes, tentativas e próxima hipótese. Não é decisão arbitrária nem dump de run.
 
-Escopo local é `namespace + logical_repo`. Escopo cross-service é
-`system_namespace + logical_repos` afetados.
+Identidade estável de Observation exclui ruído de run/revisão/linha. `gap_key` exclui revisão.
 
-A identidade estável combina motivo, escopo e alvo; `source_revision` fica fora
-dela. O registro guarda `first_seen_revision`, `last_seen_revision`, recorrência,
-tentativas, resumo curto, próxima hipótese curta, estado e Repository References
-relativas aceitas.
+Política de promoção V1 (estreita): somente AUTO_CONFIRMED/HUMAN_CONFIRMED criam/atualizam CoverageGap. Auto-confirmação restrita a cross-repo-http totalmente comprovado (capability suportada + sinal completo + evidência válida + ausência semântica comprovada). MAYBE_COVERED e casos ambíguos ficam NEEDS_REVIEW; proximidade de linha nunca promove.
 
-Política de promoção:
+Estados de CoverageGap: `open`, `stale`, `resolved`, `superseded`. Nova revisão marca como `stale`. Resolução/substituição somente via `resolve-gap` com evidência ou fechamento humano.
 
-- automática: `index_missing`, `no_accepted_l0`, `unresolved_fact_anchor`,
-  `unresolved_dispatch`;
-- marcação explícita obrigatória: `no_matching_edge`, `policy_boundary`;
-- demais observações permanecem somente no Journal.
+Separação explícita: revisão de CoverageGap é independente do Human Gate do baseline L0.
 
-Estados: `open`, `stale`, `resolved`, `superseded`. Nova revisão marca gaps
-relevantes como `stale` para revalidação. Resolução e substituição exigem
-evidência aceita ou fechamento humano explícito.
-
-Ranking de recuperação: objetivo atual, escopo exato, bloqueio de cobertura,
-recorrência e recência. A saída padrão é um resumo limitado; o histórico completo
-fica sob demanda.
-
-Conteúdo durável permitido: motivo, escopo, identidade, estado, revisões e
-recorrência estruturados; tentativas limitadas; resumo e próxima hipótese curtos;
-ponteiros de evidência relativos e scrubados.
-
-Conteúdo proibido: segredo, cookie, token ou credencial; caminho de máquina ou
-hostname; prompt ou transcrição inteira; logs irrestritos, dumps de grafo ou
-corpos de arquivo crus.
-
-O scrub atual do ops já recusa caminho, hostname e segredo, embora o checkbox em
-`docs/plans/store-compartilhado.md` ainda apareça desmarcado. A futura porta
-também deve impor os demais limites desta decisão antes de escrever.
-
-A promoção é híbrida. O Journal é a fonte de recuperação em caso de retry da
-consolidação; não se pressupõe atomicidade entre stores.
+Limites de conteúdo (porta V1): recusa path absoluto/hostname, segredo (password/secret/token/api_key/private_key em chave ou assignment), e exige Repository Reference relativa com #anchor para evidência aceita; human_closure exige actor+reason scrubados. Journal preserva todas as Observations; promoção é estreita e auditável.
 
 ## Consequências
 
 Positivas:
-- Memória foca só em CoverageGap consolidado; ADRs guardam decisões de arquitetura; ocorrências ficam no Journal.
-- Agentes ganham contexto sem importar stores remotos ou clientes pesados.
-- Human Gate preservado; nada auto-aceita evidência de grafo.
+- Todas as Observations válidas persistem; somente AUTO_CONFIRMED/HUMAN_CONFIRMED promovem gaps (V1 estreita).
+- GapOccurrence dá rastreabilidade por run; `gap_key` e `observation_id` estáveis.
+- Separação explícita do Human Gate do L0 baseline; revisão de CoverageGap independente.
+- Agentes usam operações públicas sem acoplamento a stores.
 
 Riscos e custos:
-- Mais uma camada de classificação em `record-outcome`.
-- Rollback de memória exige reprocessar o Journal.
+- Classificação de dois eixos em `record-outcome`.
+- Rollback exige reprocessar Journal (idempotente).
 
 ## Alternativas rejeitadas
 
@@ -100,7 +68,6 @@ Riscos e custos:
 - Armazenar transcrições ou dumps completos de run: cria um bucket genérico e
   viola os limites de conteúdo.
 
-## Limites de implementação (deferred)
+## Limites de implementação
 
-Nenhuma skill, schema, adapter, acesso Mongo/Oracle ou mudança em agente é
-implementado nesta decisão. As operações são nomes aprovados para a porta futura.
+As operações `load-context`, `record-outcome` e `resolve-gap` estão implementadas na porta V1 (`explorer-ops`). Auditor C detecta/valida Observations; Journal persiste Observation + GapOccurrence com idempotência. Nenhuma alteração em L0 Human Gate, Graphify ou L1/L2. Auto-confirmação V1 restrita a cross-repo-http comprovado.

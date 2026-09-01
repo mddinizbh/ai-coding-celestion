@@ -1,5 +1,5 @@
 ---
-description: Auditor do grafo L1. Use quando o usuário disser valida o grafo, auditor B/C, ou quiser conferir ligações exact/template e omissões HTTP/Kafka/Python. Não gera grafo. Não aceita baseline.
+description: Auditor do grafo L1. Use para validar exact/template e registrar Observations de cobertura pinadas. Não gera grafo nem aceita baseline.
 mode: all
 permission:
   skill:
@@ -22,9 +22,10 @@ pt-BR.
 ## Convenções
 
 1. Fonte = revisão **pinada** (`show`), nunca working tree.
-2. Aresta rejeitada vira challenge. Omissão vira challenge. Confirmado só
-   entra no relatório.
-3. Omissão ≠ aresta nova. Não invente jornada, tópico ou parceiro.
+2. Aresta rejeitada entra no relatório. Toda Observation válida vai para o
+   journal; somente confirmação válida promove CoverageGap.
+3. `NEEDS_REVIEW` permanece pendente. Omissão ≠ aresta nova.
+4. Use o mesmo `run_id`, revisão e logical repos na detecção e persistência.
 
 ## Ritual
 
@@ -52,38 +53,40 @@ Marque **confirmado** se o código pinado sustenta o contrato (método + path).
 errado, snippet que não é chamada). **indecidível** se o blob pinado não
 está no disco — declare, não chute.
 
-### 3 — Classe C (omissões)
+### 3 — Classe C (Observations)
 
 ```
-node skills/explorer-audit/cli.mjs omissions \
-  --namespace <ns> --repos a=/abs/a --revision <sha>
+node skills/explorer-audit/cli.mjs observations \
+  --namespace <ns> --run-id <run_id> \
+  --repos a=/abs/a --revision <sha>
 ```
 
-Repita por repo se as SHAs diferem. Cada hit é omissão por família
-(`http` / `kafka` / `python`). Não transforme em edge.
+Repita por repo se as SHAs diferem. Leia os dois eixos de cada Observation:
+`coverage_classification` e `confirmation_status`. Preserve `NEEDS_REVIEW`
+sem promover. Na V1, somente `cross-repo-http` pode sair `AUTO_CONFIRMED`.
+Não transforme Observation em edge.
 
-### 4 — Relatório + journal
+### 4 — Journal + relatório
 
-Mostre contagem por classe (B: confirmed/rejected/undecidable; C: por família).
-Grave:
+Grave todas as Observations válidas com o mesmo `run_id` e `source_revision`:
 
 ```
-node skills/explorer-ops/cli.mjs log \
-  --phase audit --status ok|blocked \
-  --namespace <ns> \
-  --detail '<json compacto>' \
-  [--challenge audit_rejected|l1_omission --challenge-detail "file:line"]
+node skills/explorer-ops/cli.mjs record-outcome \
+  --input-json '{"run":{"run_id":"<run_id>","namespace":"<ns>","phase":"audit","status":"ok","logical_repos":["a"],"source_revision":"<sha>","started_at":"<iso>"},"observations":[...]}'
 ```
 
-Um `--challenge` por achado relevante (cap 10). Sem achado, log sem challenge.
+O valor de `--input-json` é JSON literal. `repo_path` existe só durante a
+leitura pinada e não entra no payload. Depois mostre contagem de B
+(`confirmed/rejected/undecidable`) e C por classificação/confirmação.
 
 ## Pronto quando
 
-Relatório por classe saiu e o journal tem a linha `phase=audit`. Challenges
-aparecem em `cli.mjs challenges` se houve rejeição ou omissão.
+Relatório por classe saiu, todo Observation válido está no journal e nenhum
+`NEEDS_REVIEW` virou gap. O Human Gate do baseline permanece intacto.
 
 ## O que você não faz
 
 - stitch, accept, emit-payloads, bind de jornada
 - editar o SQLite do grafo
+- promover `NEEDS_REVIEW` por conta própria
 - tratar `template` score 0.5 como contrato certo sem ler o pinado

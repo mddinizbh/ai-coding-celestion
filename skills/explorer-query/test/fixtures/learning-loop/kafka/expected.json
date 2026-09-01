@@ -1,0 +1,31 @@
+{
+  "capability": "kafka",
+  "outcomes": [
+    {
+      "source_anchor": "EventBus#ambiguous",
+      "expected_edge": false,
+      "expected_omission": false,
+      "coverage_classification": "UNKNOWN",
+      "detected_confirmation_status": "NEEDS_REVIEW",
+      "review_decision": "REJECTED",
+      "final_confirmation_status": "REJECTED",
+      "gap_occurrence": false
+    },
+    {
+      "source_anchor": "EventBus#consume",
+      "expected_edge": false,
+      "expected_omission": true,
+      "coverage_classification": "POSSIBLE_OMISSION",
+      "detected_confirmation_status": "NEEDS_REVIEW",
+      "review_decision": "HUMAN_CONFIRMED",
+      "final_confirmation_status": "HUMAN_CONFIRMED",
+      "gap_occurrence": true
+    }
+  ],
+  "expected_metrics": {
+    "edge_precision": "N/A",
+    "edge_recall": "N/A",
+    "omission_precision": 1,
+    "omission_recall": 1
+  }
+}

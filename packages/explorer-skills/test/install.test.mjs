@@ -37,9 +37,15 @@ describe("opencode-explorer install/status/uninstall for explorer-ops/audit + co
     // check marker in command files
     const cmdDir = join(process.env.XDG_CONFIG_HOME || join(tmpHome, ".config"), "opencode", "commands");
     const opsCmd = join(cmdDir, "explorer-ops.md");
+    const auditCmd = join(cmdDir, "explorer-audit.md");
     assert.ok(existsSync(opsCmd), "explorer-ops.md command should exist");
-    const content = readFileSync(opsCmd, "utf8");
-    assert.ok(content.includes(MARKER), "command must contain ownership marker");
+    assert.ok(existsSync(auditCmd), "explorer-audit.md command should exist");
+    const opsContent = readFileSync(opsCmd, "utf8");
+    const auditContent = readFileSync(auditCmd, "utf8");
+    assert.ok(opsContent.includes(MARKER), "ops command must contain ownership marker");
+    assert.ok(auditContent.includes(MARKER), "audit command must contain ownership marker");
+    assert.ok(opsContent.includes("record-outcome"), "ops command must expose record-outcome");
+    assert.ok(auditContent.includes("observations"), "audit command must expose observations");
 
     // status
     const statusRes = await runAll("status");

@@ -1,0 +1,1 @@
+[{"kind":"http_outbound","logical_repo":"checkout","source_revision":"fixture-head","method":"GET","path":"/invoices/{param}","contract_key":"GET /invoices/{param}","file":"InvoiceClient.kt","line":2}]

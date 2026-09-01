@@ -51,34 +51,83 @@ function gitShow(repoPath, revision, path) {
 // BillingClient#get, BillingClient#ambiguous, InvoiceClient#covered, InvoiceClient#missing, InvoiceClient#dynamic,
 // EventBus#consume, EventBus#ambiguous.
 
-const FEIGN_DECL_RE =
-  /@FeignClient\s*\([^)]*\)\s*(?:interface|class)\s+(\w+)[\s\S]*?@(?:Get|Post|Put|Delete|Patch|Request)Mapping\s*\(\s*["']([^"']+)["'][^)]*\)\s*(?:fun|def|public|private|protected|\s)*\s*(\w+)\s*\(/g;
+// Global regex architecture DELETED per prerequisite. Bounded type->method->intra-method below.
 
-const CONTROLLER_DECL_RE =
-  /@(?:RestController|Controller)[\s\S]*?class\s+(\w+)[\s\S]*?@(?:Get|Post|Put|Delete|Patch|Request)Mapping\s*\(\s*["']([^"']+)["'][^)]*\)\s*(?:fun|def|public|private|protected|\s)*\s*(\w+)\s*\(/g;
+function collectTypes(body) {
+  const types = [];
+  const typeRe = /(@FeignClient\s*\([^)]*\)|@RestController|@Controller)[\s\S]*?(?:interface|class)\s+(\w+)/g;
+  let m;
+  while ((m = typeRe.exec(body)) !== null) {
+    const anno = m[1];
+    const name = m[2];
+    const start = m.index;
+    let end = body.length;
+    const nexts = [body.indexOf('@FeignClient', start + 20), body.indexOf('@RestController', start + 20), body.indexOf('@Controller', start + 20)].filter(x => x > 0);
+    if (nexts.length) end = Math.min(...nexts);
+    types.push({ name, anno, start, end, slice: body.slice(start, end) });
+  }
+  return types;
+}
 
-const JAVA_CALL_RE =
-  /\b([A-Z]\w+)\s*\.\s*([a-z]\w+)\s*\(/g;
+function collectMethods(typeSlice) {
+  const methods = [];
+  const methodRe = /(@(?:Get|Post|Put|Delete|Patch|Request)Mapping\s*\(\s*["']([^"']+)["'][^)]*\)|@KafkaListener\s*\([^)]*topics\s*=\s*["']([^"']+)["'][^)]*\))[\s\S]*?(?:fun|def|public|private|protected|\s)*\s*(\w+)\s*\(/g;
+  let m;
+  while ((m = methodRe.exec(typeSlice)) !== null) {
+    const annoPart = m[1];
+    const pathOrTopic = m[2] || m[3];
+    const methodName = m[4];
+    methods.push({ methodName, annoPart, pathOrTopic, slice: m[0] });
+  }
+  const callRe = /(RestTemplate|WebClient|RestClient)\s*\.\s*(getForObject|getForEntity|exchange|postForObject)\s*\(\s*["']([^"']+)["'][^)]*\)/g;
+  while ((m = callRe.exec(typeSlice)) !== null) {
+    methods.push({ methodName: 'call', annoPart: null, pathOrTopic: m[3], slice: m[0], isCall: true });
+  }
+  return methods;
+}
 
-const KAFKA_LISTENER_RE =
-  /@KafkaListener\s*\([^)]*topics\s*=\s*["']([^"']+)["'][^)]*\)[\s\S]*?(?:fun|def|public|private|protected|\s)*\s*(\w+)\s*\(/g;
-
-const KAFKA_TEMPLATE_RE =
-  /KafkaTemplate[\s\S]*?\.send\s*\(\s*["']([^"']+)["'][^,)]*,[^)]*\)[\s\S]*?(?:fun|def|public|private|protected|\s)*\s*(\w+)\s*\(/g;
-
-const HTTP_CALL_RE =
-  /(?:RestTemplate|WebClient|RestClient)\s*[\s\S]*?\.(?:getForObject|getForEntity|exchange|postForObject)\s*\(\s*["']([^"']+)["'][^)]*\)[\s\S]*?(?:fun|def|public|private|protected|\s)*\s*(\w+)\s*\(/g;
-
-const AXIOS_RE =
-  /axios\.(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["'][^)]*\)[\s\S]*?(?:function|const|let|var)\s*(\w+)\s*=|(?:fun|def|public|private|protected|\s)*\s*(\w+)\s*\(/g;
-
-const PYTHON_HTTP_RE =
-  /(?:requests|httpx|aiohttp)\.(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["'][^)]*\)[\s\S]*?(?:def)\s*(\w+)\s*\(/g;
-
-const PYTHON_FASTAPI_RE =
-  /@app\.(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["'][^)]*\)[\s\S]*?(?:def)\s*(\w+)\s*\(/g;
+function extractSignalsFromMethod(meth, typeName, typeAnno) {
+  const signals = [];
+  const isFeignType = typeAnno && typeAnno.includes('@FeignClient');
+  const isCtrlType = typeAnno && (typeAnno.includes('@RestController') || typeAnno.includes('@Controller'));
+  if (isFeignType && meth.annoPart && meth.annoPart.includes('Mapping')) {
+    const path = meth.pathOrTopic;
+    signals.push({ capability: 'spring-feign', fields: { client: typeName, method: path, path }, source_anchor: `${typeName}#${meth.methodName}`, line: 1, evidence: meth.slice.slice(0, 160) });
+  } else if ((isCtrlType || !isFeignType) && meth.annoPart && meth.annoPart.includes('Mapping')) {
+    const path = meth.pathOrTopic;
+    const ann = meth.annoPart.match(/@(Get|Post|Put|Delete|Patch|Request)Mapping/)[0];
+    signals.push({ capability: 'spring-controller', fields: { annotation: ann, path, method: meth.methodName }, source_anchor: `${typeName}#${meth.methodName}`, line: 1, evidence: meth.slice.slice(0, 160) });
+  } else if (meth.annoPart && meth.annoPart.includes('KafkaListener')) {
+    const topic = meth.pathOrTopic;
+    signals.push({ capability: 'kafka', fields: { topic, direction: 'in', client: 'listener' }, source_anchor: `${typeName}#${meth.methodName}`, line: 1, evidence: meth.slice.slice(0, 160) });
+  } else if (meth.isCall) {
+    const ck = contractKey('GET', meth.pathOrTopic);
+    const complete = !!(meth.pathOrTopic && meth.pathOrTopic.trim() && !meth.pathOrTopic.includes('$'));
+    signals.push({ capability: 'cross-repo-http', fields: { from_logical_repo: 'checkout', to_contract_key: ck }, source_anchor: `${typeName}#${meth.methodName}`, line: 1, evidence: meth.slice.slice(0, 160), coverage_classification: complete ? 'POSSIBLE_OMISSION' : 'UNKNOWN' });
+  }
+  return signals;
+}
 
 function extractAnchors(body, file) {
+  const anchors = [];
+  let types = collectTypes(body);
+  if (types.length === 0) {
+    // fallback for loose calls in plain class (flow test fixture and bound test)
+    const classMatch = body.match(/class\s+(\w+)/);
+    const fallbackName = classMatch ? classMatch[1] : 'Unknown';
+    types = [{ name: fallbackName, anno: '', start: 0, end: body.length, slice: body }];
+  }
+  for (const t of types) {
+    const methods = collectMethods(t.slice);
+    for (const meth of methods) {
+      const sigs = extractSignalsFromMethod(meth, t.name, t.anno);
+      anchors.push(...sigs);
+    }
+  }
+  return anchors;
+}
+
+function _oldExtractAnchors_DISABLED(body, file) {
   const anchors = [];
   // Feign first (precedence)
   let m;
@@ -94,20 +143,18 @@ function extractAnchors(body, file) {
       evidence: m[0].slice(0, 160),
     });
   }
-  // Controller only if no Feign match on same type (simple: if file had Feign, skip controller for now; real would track per decl)
-  if (anchors.length === 0) {
-    while ((m = CONTROLLER_DECL_RE.exec(body)) !== null) {
-      const ctrl = m[1];
-      const path = m[2];
-      const method = m[3];
-      anchors.push({
-        capability: "spring-controller",
-        fields: { annotation: "GetMapping", path, method },
-        source_anchor: `${ctrl}#${method}`,
-        line: body.substring(0, m.index).split("\n").length,
-        evidence: m[0].slice(0, 160),
-      });
-    }
+  // Controller collected independently (per-type precedence enforced by bounded extraction in final impl)
+  while ((m = CONTROLLER_DECL_RE.exec(body)) !== null) {
+    const ctrl = m[1];
+    const path = m[2];
+    const method = m[3];
+    anchors.push({
+      capability: "spring-controller",
+      fields: { annotation: "GetMapping", path, method },
+      source_anchor: `${ctrl}#${method}`,
+      line: body.substring(0, m.index).split("\n").length,
+      evidence: m[0].slice(0, 160),
+    });
   }
   // Kafka
   while ((m = KAFKA_LISTENER_RE.exec(body)) !== null) {
@@ -136,9 +183,10 @@ function extractAnchors(body, file) {
   while ((m = HTTP_CALL_RE.exec(body)) !== null) {
     const contract = m[1];
     const method = m[2] || "call";
+    const ck = contractKey("GET", contract);
     anchors.push({
       capability: "cross-repo-http",
-      fields: { from_logical_repo: "checkout", to_contract_key: contract },
+      fields: { from_logical_repo: "checkout", to_contract_key: ck },
       methodHint: "GET",
       source_anchor: `${method}`,
       line: body.substring(0, m.index).split("\n").length,

@@ -239,3 +239,100 @@ test("detectObservations applies validate then confirm using frontier_report fac
   assert.equal(httpObs.confirmation_status, "NOT_APPLICABLE");
   rmSync(repo.cwd, { recursive: true, force: true });
 });
+
+test("mixed Feign interface + Controller class in one file emits both (per-type precedence)", () => {
+  const repo = makeRepo({
+    "src/Mixed.kt":
+      '@FeignClient(name="billing")\ninterface BillingClient {\n@GetMapping("/invoices")\nfun get(): Invoice\n}\n\n@RestController\nclass OrderController {\n@GetMapping("/orders")\nfun list(): List<Order>\n}',
+  });
+  const observations = detectObservations({
+    namespace: "ns",
+    run_id: "run-1",
+    repo_path: repo.cwd,
+    revision: repo.head,
+    logical_repo: "checkout",
+    frontier_report: { facts: [], files_scanned: 1, files_total: 1, source_revision: repo.head },
+  });
+  const feign = observations.find((o) => o.capability === "spring-feign" && o.source_anchor === "BillingClient#get");
+  const ctrl = observations.find((o) => o.capability === "spring-controller" && o.source_anchor === "OrderController#list");
+  assert.ok(feign, "Feign must be emitted");
+  assert.ok(ctrl, "Controller must be emitted independently");
+  rmSync(repo.cwd, { recursive: true, force: true });
+});
+
+test("two methods cannot steal annotations or calls across declaration boundaries", () => {
+  const repo = makeRepo({
+    "src/Bound.kt":
+      'class Bound {\n  @GetMapping("/a")\n  fun a() {}\n  fun b() { RestTemplate().getForObject("/b", String::class.java) }\n}',
+  });
+  const observations = detectObservations({
+    namespace: "ns",
+    run_id: "run-1",
+    repo_path: repo.cwd,
+    revision: repo.head,
+    logical_repo: "checkout",
+    frontier_report: { facts: [], files_scanned: 1, files_total: 1, source_revision: repo.head },
+  });
+  const ctrl = observations.find((o) => o.source_anchor === "Bound#a");
+  const http = observations.find((o) => o.source_anchor === "Bound#b");
+  assert.ok(ctrl);
+  assert.ok(http);
+  assert.equal(observations.filter((o) => o.capability === "spring-controller").length, 1);
+  rmSync(repo.cwd, { recursive: true, force: true });
+});
+
+test("exact containing Type#method anchors and deterministic evidence", () => {
+  const repo = makeRepo({
+    "src/Exact.kt": '@FeignClient(name="ex")\ninterface ExactClient {\n@GetMapping("/x")\nfun x(): X\n}',
+  });
+  const observations = detectObservations({
+    namespace: "ns",
+    run_id: "run-1",
+    repo_path: repo.cwd,
+    revision: repo.head,
+    logical_repo: "checkout",
+    frontier_report: { facts: [], files_scanned: 1, files_total: 1, source_revision: repo.head },
+  });
+  const feign = observations.find((o) => o.capability === "spring-feign");
+  assert.equal(feign.source_anchor, "ExactClient#x");
+  assert.ok(feign.evidence_snippet.includes("@GetMapping"));
+  rmSync(repo.cwd, { recursive: true, force: true });
+});
+
+test("no framework/java-call duplication inside same type", () => {
+  const repo = makeRepo({
+    "src/NoDup.kt":
+      '@FeignClient(name="nd")\ninterface NoDupClient {\n@GetMapping("/nd")\nfun nd(): ND\n}',
+  });
+  const observations = detectObservations({
+    namespace: "ns",
+    run_id: "run-1",
+    repo_path: repo.cwd,
+    revision: repo.head,
+    logical_repo: "checkout",
+    frontier_report: { facts: [], files_scanned: 1, files_total: 1, source_revision: repo.head },
+  });
+  const javaCalls = observations.filter((o) => o.capability === "java-call");
+  assert.equal(javaCalls.length, 0);
+  rmSync(repo.cwd, { recursive: true, force: true });
+});
+
+test("dynamic vs static completeness: non-empty args complete, zero/unknown incomplete", () => {
+  const repo = makeRepo({
+    "src/Dyn.kt":
+      'class Dyn {\n  fun staticCall() = RestTemplate().getForObject("/s", String::class.java)\n  fun dynCall(p: String) = RestTemplate().getForObject(p, String::class.java)\n}',
+  });
+  const observations = detectObservations({
+    namespace: "ns",
+    run_id: "run-1",
+    repo_path: repo.cwd,
+    revision: repo.head,
+    logical_repo: "checkout",
+    frontier_report: { facts: [], files_scanned: 1, files_total: 1, source_revision: repo.head },
+  });
+  const stat = observations.find((o) => o.source_anchor === "Dyn#staticCall");
+  const dyn = observations.find((o) => o.source_anchor === "Dyn#dynCall");
+  assert.equal(stat.coverage_classification, "POSSIBLE_OMISSION");
+  assert.equal(dyn.coverage_classification, "UNKNOWN");
+  rmSync(repo.cwd, { recursive: true, force: true });
+});

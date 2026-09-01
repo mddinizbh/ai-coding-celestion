@@ -147,22 +147,39 @@ aconteceu; não transforma uma ocorrência em fato do grafo nem em memória
 consolidada.
 
 ### CoverageGap
-Lacuna de cobertura relevante e ainda não resolvida, consolidada a partir do
-Journal. Guarda tentativas e a próxima hipótese; não guarda decisão arbitrária,
-transcrição ou dump de run. Também não é fato do Project Knowledge Graph.
+Deficiência durável consolidada (`gap_key` UNIQUE: razão + escopo + capability + target_signature). Status: open | stale | resolved | superseded. first_seen/last_seen/occurrences são projeções de GapOccurrence. Revisão de CoverageGap é independente do Human Gate do L0 baseline.
 
 ### Escopo e identidade
-Escopo local = `namespace + logical_repo`; cross-service =
-`system_namespace + logical_repos` afetados. A identidade estável combina
-motivo, escopo e alvo e exclui `source_revision`.
+Escopo canônico = `namespace` + lista ordenada de `logical_repos`; escopo local representado por um único `logical_repo` na lista; escopo cross-repo pelo conjunto afetado. A identidade estável combina motivo, escopo e alvo e exclui `source_revision`.
 
 ### Estado de CoverageGap
 `open`, `stale`, `resolved` ou `superseded`. Nova revisão marca gaps relevantes
 como `stale`. Resolução e substituição exigem evidência aceita ou fechamento
 humano explícito.
 
+### Observation
+Registro de detecção com dois eixos independentes: `coverage_classification` (COVERED | MAYBE_COVERED | POSSIBLE_OMISSION | UNKNOWN) e `confirmation_status` (NOT_APPLICABLE | AUTO_CONFIRMED | NEEDS_REVIEW | HUMAN_CONFIRMED | REJECTED). Todo Observation válido persiste no Journal.
+
+### coverage_classification
+Eixo do detector: COVERED (match semântico), MAYBE_COVERED (proximidade de linha), POSSIBLE_OMISSION, UNKNOWN. Nunca alterado por revisão humana.
+
+### confirmation_status
+Eixo de promoção: NOT_APPLICABLE (COVERED), AUTO_CONFIRMED (V1: somente cross-repo-http comprovado), NEEDS_REVIEW, HUMAN_CONFIRMED, REJECTED. Somente AUTO_CONFIRMED/HUMAN_CONFIRMED criam/atualizam CoverageGap.
+
+### observation_id
+Identidade estável: `hash(capability + canonical_signal + source_evidence_identity)`. Exclui ruído de run/revisão/linha. Retry idempotente.
+
+### signal_key
+União fechada por capability (java-call, spring-controller, spring-feign, cross-repo-http, kafka, intentional-omission). Campos obrigatórios após normalização canônica.
+
+### target_signature
+Serialização canônica do signal_key (ordem de campos + normalização determinística). Base da identidade estável.
+
+### GapOccurrence
+Evidência por run: `run_id`, `gap_key`, `observation_id` (`UNIQUE(run_id, gap_key)`). Primeira Observation confirmada cria; equivalentes posteriores ficam no Journal.
+
+### gap_key
+Identidade estável do CoverageGap: `reason + scope + capability + target_signature`. Exclui revisão.
+
 ### load-context / record-outcome / resolve-gap
-Operações públicas aprovadas para a futura porta de memória. `load-context`
-recupera contexto antes da execução; `record-outcome` registra e consolida o
-resultado de uma fase; `resolve-gap` fecha ou substitui uma lacuna sob as regras
-do estado. Ainda não são comandos implementados.
+Operações públicas implementadas na porta V1. `load-context` recupera contexto; `record-outcome` persiste Observation e promove via GapOccurrence (somente AUTO/HUMAN_CONFIRMED); `resolve-gap` fecha/substitui com evidência ou fechamento humano. Separação explícita do Human Gate do L0 baseline.

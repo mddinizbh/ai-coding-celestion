@@ -1,53 +1,73 @@
-# opencode-observability (Milestone 0)
+# opencode-observability
 
-Minimal TypeScript plugin for OpenCode V2 beta that observes `ctx.session.hook("context")` dispatches.
+Plugin TypeScript para OpenCode V2 beta que adiciona `/celestion-debug`, sidebar de métricas no TUI e comando `/celestion-history` com dashboard em browser.
 
-Emits one metadata-only JSON line to stderr:
-`{"sessionID":"...","agent":"...","provider":"...","model":"...","systemCount":N,"messageCount":N,"toolCount":N,"serializedChars":N,"utf8Bytes":N,"timestamp":"..."}`
+A versão do plugin está fixada em `@opencode-ai/plugin@0.0.0-beta-18743`. O smoke test usa `@opencode-ai/cli@0.0.0-beta-18866`. O pacote não é compatível com OpenCode estável 1.x.
 
-## Beta assumption (IMPORTANT)
-This package pins **@opencode-ai/plugin@0.0.0-beta-18743** (promise API with Plugin.define + SessionContext).
-It is incompatible with the repository's stable @opencode-ai/plugin 1.18.x (no session.context hook, different Hooks shape).
-Load only via local package in a beta OpenCode runtime. Do not mix with stable pins in .opencode/package.json.
+Raiz do pacote expõe `index.ts` (plugin principal) e `tui.ts` (entrada TUI com sidebar e debug).
 
-## Local configuration (beta only)
-In a project-level `opencode.jsonc` at the repository root:
+## Configuração local (beta V2)
+
+Em `opencode.jsonc` na raiz do repositório:
+
 ```jsonc
 {
-  "plugins": [
-    "./packages/opencode-observability/src/index.ts"
-  ]
+  "plugins": ["./packages/opencode-observability"]
 }
 ```
 
-For a global config such as `~/.config/opencode/opencode.jsonc`, replace the
-relative entry with the absolute path to `src/index.ts`. Restart OpenCode.
+O loader beta descobre os dois entrypoints. Não aponte a configuração apenas para `src/index.ts`.
 
-## Commands / usage
-No slash commands. The observer is passive.
-From the repository root, run `opencode`. Every context dispatch emits one
-JSONL line on stderr.
+## Comandos
 
-Expected output example:
-`{"sessionID":"ses_abc","agent":"default","provider":"anthropic","model":"claude-3-5-sonnet-20241022","systemCount":2,"messageCount":5,"toolCount":3,"serializedChars":1240,"utf8Bytes":1240,"timestamp":"2026-09-01T16:41:45.938Z"}`
+- `/celestion-debug`: expõe métricas e estado via TUI.
+- `/celestion-history`: inicia servidor sob demanda (uma única instância reutilizada), abre requisição de browser a cada chamada, para no cleanup do plugin.
 
-## Privacy behavior
-- Default output contains ONLY counts, IDs, sizes, timestamp.
-- NEVER logs system/messages/tools content, generation values, providerOptions, prompts, bodies, or tool outputs.
-- No persistence, no SQLite, no files written.
-- Sink injection is internal test seam only.
+Servidor escuta apenas em `127.0.0.1` em porta escolhida pelo sistema. Token de lançamento vai no fragmento da URL; cliente remove antes das requisições. Rotas de dados/health/SSE exigem Bearer exato e same-origin exato quando Origin presente. Assets estáticos do shell não contêm dados de histórico e carregam antes da auth.
 
-## Deterministic + fail-open
-Measurement uses injected clock for exact timestamp. Sink and reporter failures are contained via Result; callback never throws. Internal factory seam supports test injection.
+## Histórico e persistência
 
-## Verification (dev)
+Usa `StorageDomain` do OpenCode. Hidrata após restart. Armazena apenas metadados sanitizados. Retém padrão de 5.000 eventos por run.
+
+- Página de consulta: 200 eventos por padrão e no máximo.
+- Limite no browser: 1.000 eventos.
+- Título sanitizado: até 160 caracteres.
+- Fallback SSE: após 3 falhas, polling de 2.000 ms.
+
+Desktop-only. Sem suporte mobile declarado.
+
+## Privacidade (exclusões exatas)
+
+Nunca persiste nem expõe:
+- corpos de prompt/message
+- input/output bruto de tools
+- corpos de generation
+- provider options
+- headers/valores de auth
+- secrets
+- paths irrestritos
+- stacks/erros crus
+
+Metadados permitidos: counts/sizes, tipo de evento, labels de provider/model/agent, IDs/linhagem, título sanitizado.
+
+## Shutdown
+
+Automático no cleanup do OpenCode/plugin. Drena persistência e fecha recursos de SSE/servidor.
+
+## Verificação
+
+Na raiz do repositório:
+
 ```bash
 cd packages/opencode-observability
 bun install
 bun test
-bunx tsc --noEmit -p tsconfig.json
+bun run typecheck
+bun test test/history-dashboard-acceptance.test.ts test/history-dashboard-privacy.test.ts
 ```
-All under 250 pure LOC per file. TDD: red (module not found) → green.
 
-## Mismatch note
-Stable 1.18.11 types (in ~/.config/opencode/node_modules) expose only legacy Hooks (event, chat.message, tool, auth, provider). No SessionContext or session.hook. This package requires the exact beta.
+O smoke de runtime exige metadados locais e sanitizados de uma sessão já preparada. Ele é evidência de manutenção, não um script público do pacote. Execute na raiz do repositório:
+
+```bash
+bun run .omo/evidence/task-21-runtime-smoke/harness.mjs
+```

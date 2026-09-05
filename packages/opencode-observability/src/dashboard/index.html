@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Celestion History Dashboard</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./render.js"></script>
+  <script type="module" src="./app.js" defer></script>
+</head>
+<body id="dashboard-root" class="app-root">
+<header class="app-header">
+  <div class="brand">
+    <h1>Celestion History</h1>
+    <p class="brand-sub">Session event timeline</p>
+  </div>
+  <p id="connection-badge" class="badge-connection" role="status" aria-live="polite" data-mode="sse">SSE</p>
+</header>
+<main class="dashboard-main">
+  <aside class="panel panel-tree" aria-label="Session lineage">
+    <div class="panel-header">
+      <h2>Lineage</h2>
+      <label class="toggle-system">
+        <input type="checkbox" id="toggle-system">
+        <span>System sessions</span>
+      </label>
+    </div>
+    <div class="panel-toolbar">
+      <button type="button" id="select-all" data-select="all" aria-pressed="true">All sessions</button>
+    </div>
+    <p id="tree-loading" class="state-block state-loading" role="status" hidden>Loading lineage…</p>
+    <ul id="tree" class="tree" role="tree" aria-label="Session lineage tree"></ul>
+  </aside>
+  <section class="panel panel-timeline" aria-labelledby="timeline-heading">
+    <div class="panel-header">
+      <h2 id="timeline-heading">Timeline</h2>
+      <output id="timeline-count" class="timeline-count" for="timeline">0 events</output>
+    </div>
+    <p id="state-loading" class="state-block state-loading" role="status" hidden>Loading events…</p>
+    <p id="state-empty" class="state-block state-empty" role="status" hidden>No events in this scope.</p>
+    <div id="state-error" class="state-block state-error" role="alert" hidden>
+      <p class="error-heading">Failed to load events.</p>
+      <p id="error-message" class="error-message"></p>
+      <button type="button" id="retry" class="retry">Retry</button>
+    </div>
+    <ol id="timeline" class="timeline" aria-label="Event timeline"></ol>
+    <div class="timeline-footer">
+      <button type="button" id="load-older" class="load-older" hidden>Load older events</button>
+    </div>
+  </section>
+</main>
+</body>
+</html>

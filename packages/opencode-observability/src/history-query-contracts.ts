@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { SessionHistoryEvent } from './history-domain';
 import type { LineageRootSummary, ScopeFailureCode } from './history-query';
+import { hasValidHistoryScope, historyScopeShape } from './history-scope';
 
 export const EVENT_PAGE_LIMIT_MIN = 1;
 export const EVENT_PAGE_LIMIT_MAX = 200;
@@ -13,14 +14,11 @@ export const EVENT_PAGE_LIMIT_DEFAULT = 200;
  * direct callers get the sanitized code instead of a schema error.
  */
 export const listEventsInputSchema = z.object({
-  rootSessionID: z.string().min(1),
-  selectedSessionID: z.string().min(1),
-  scope: z.enum(['session', 'subtree']),
-  includeSystem: z.boolean(),
+  ...historyScopeShape,
   direction: z.enum(['older', 'newer']).optional(),
   cursor: z.string().min(1).optional(),
   limit: z.number().optional()
-}).strict();
+}).strict().refine(hasValidHistoryScope);
 
 export type ListEventsInput = z.infer<typeof listEventsInputSchema>;
 
@@ -44,6 +42,8 @@ export interface HistoryEventPage {
   readonly hasMore: boolean;
   /** Present only while `hasMore` is true; `null` on the final or an empty page. */
   readonly nextCursor: string | null;
+  /** Cursor após o último evento desta página, mesmo quando hasMore=false. */
+  readonly newerCursor?: string;
   /** `session` scope only, and only when ALL matching events share exactly one runID; otherwise omitted. */
   readonly resolvedRunID?: string;
 }

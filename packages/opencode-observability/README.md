@@ -25,9 +25,17 @@ O loader beta descobre os dois entrypoints. Não aponte a configuração apenas 
 
 Servidor escuta apenas em `127.0.0.1` em porta escolhida pelo sistema. Token de lançamento vai no fragmento da URL; cliente remove antes das requisições. Rotas de dados/health/SSE exigem Bearer exato e same-origin exato quando Origin presente. Assets estáticos do shell não contêm dados de histórico e carregam antes da auth.
 
+O token não expira por tempo. Fica no `sessionStorage` da aba, separado do histórico, para que F5 continue funcionando. Um novo link de lançamento substitui o token salvo. Se o navegador bloquear esse armazenamento, a abertura pelo comando ainda funciona, mas a recarga exige reabrir o link. Após reiniciar o plugin, use `/celestion-history` novamente, pois o servidor tem outro token e pode usar outra porta. Uma resposta 401 limpa o acesso salvo e interrompe as tentativas automáticas. Falhas de conexão não apagam o token.
+
 ## Histórico e persistência
 
 Usa `StorageDomain` do OpenCode. Hidrata após restart. Armazena apenas metadados sanitizados. Retém padrão de 5.000 eventos por run.
+
+O dashboard abre em **All sessions**, reunindo todas as conversas registradas no histórico disponível ao plugin. A sessão de onde o comando foi chamado não limita essa visão. A lateral mostra todas as árvores, com controles para selecionar uma sessão ou sua subárvore. Sessões de sistema continuam ocultas por padrão. Na visão global, eventos de novas sessões também atualizam a lateral sem precisar reabrir a aba.
+
+As consultas HTTP e SSE aceitam `scope=all`, sem `rootSessionID` nem `selectedSessionID`. Os escopos `session` e `subtree` continuam exigindo esses IDs. Páginas não vazias incluem `newerCursor` para atualização ao vivo, separado de `nextCursor`, que mantém a continuação da paginação.
+
+Na conexão global sem cursor, o SSE assina os eventos ao vivo antes de reler o histórico disponível. Isso cobre o intervalo entre uma página inicialmente vazia e a conexão. Eventos repetidos são deduplicados. A lateral também é reconciliada com as páginas recebidas, e chegadas durante uma atualização pendente provocam uma nova leitura.
 
 - Página de consulta: 200 eventos por padrão e no máximo.
 - Limite no browser: 1.000 eventos.
@@ -38,7 +46,7 @@ Desktop-only. Sem suporte mobile declarado.
 
 ## Privacidade (exclusões exatas)
 
-Nunca persiste nem expõe:
+O histórico nunca persiste nem expõe:
 - corpos de prompt/message
 - input/output bruto de tools
 - corpos de generation

@@ -26,14 +26,14 @@ describe('dashboard state bootstrap and selection', () => {
     const state = dashboardReducer(createDashboardState(), {
       type: 'bootstrapReady',
       roots,
-      tree,
+      trees: [tree],
       subtreeSessionIDs: ['root', 'child'],
       page: { events: [ev('child', 'r', 1, 2)], hasMore: true, nextCursor: 'older-1' }
     });
 
     assert.equal(selectStatus(state), 'ready');
     assert.deepStrictEqual(state.roots, roots);
-    assert.deepStrictEqual(state.tree, tree);
+    assert.deepStrictEqual(state.trees, [tree]);
     assert.deepStrictEqual(state.subtreeSessionIDs, ['root', 'child']);
     assert.deepStrictEqual(eventIDs(selectTimeline(state)), ['2:child:r:1']);
     assert.equal(selectHasOlder(state), true);
@@ -43,7 +43,7 @@ describe('dashboard state bootstrap and selection', () => {
     const ready = dashboardReducer(createDashboardState(), {
       type: 'bootstrapReady',
       roots: [],
-      tree: null,
+      trees: [],
       subtreeSessionIDs: ['s2', 's3'],
       page: { events: [ev('s1', 'a', 1, 1), ev('s2', 'a', 1, 2), ev('s3', 'a', 1, 3)], hasMore: true, nextCursor: 'old' }
     });
@@ -137,7 +137,7 @@ describe('dashboard cursors and connection states', () => {
 
   it('transitions loading ready empty and error from reducer actions', () => {
     const loading = dashboardReducer(createDashboardState(), { type: 'bootstrapStarted' });
-    const empty = dashboardReducer(loading, { type: 'bootstrapReady', roots: [], tree: null, subtreeSessionIDs: [], page: { events: [], hasMore: false, nextCursor: null } });
+    const empty = dashboardReducer(loading, { type: 'bootstrapReady', roots: [], trees: [], subtreeSessionIDs: [], page: { events: [], hasMore: false, nextCursor: null } });
     const ready = dashboardReducer(empty, { type: 'streamEvent', event: ev('s', 'r', 1, 1) });
     const error = dashboardReducer(ready, { type: 'errorEntered', message: 'sanitized failure' });
 

@@ -51,6 +51,7 @@ export const pageSchema = z.object({
   events: z.array(eventSchema),
   hasMore: z.boolean(),
   nextCursor: z.string().nullable(),
+  newerCursor: z.string().min(1).optional(),
   resolvedRunID: z.string().optional(),
 }).strict();
 

@@ -2,12 +2,15 @@ import { POLL_INTERVAL_MS, SSE_FAILURE_THRESHOLD, createDashboardState, dashboar
 import { renderApp } from './render.js';
 
 const GENERIC_ERROR = 'Dashboard unavailable.';
+const ACCESS_ERROR = 'Acesso ao dashboard indisponível. Reabra com /celestion-history no OpenCode.';
+const SERVER_ERROR = 'Não foi possível conectar ao servidor local. Tente novamente ou reabra com /celestion-history.';
+const TOKEN_STORAGE_KEY = 'celestion-history-token';
 
 /**
  * @typedef {{ hash: string, pathname: string, search: string }} ClientLocation
  * @typedef {{ setTimeout: Function, setInterval: Function, clearInterval: Function }} ClientTimers
  * @typedef {import('./state.js').DashboardState} DashboardState
- * @typedef {{ fetch: Function, location: ClientLocation, history: { replaceState: Function }, timers: ClientTimers, root?: Element | null, requestAnimationFrame?: Function, renderApp?: Function }} DashboardClientDeps
+ * @typedef {{ fetch: Function, location: ClientLocation, history: { replaceState: Function }, timers: ClientTimers, sessionStorage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>, root?: Element | null, requestAnimationFrame?: Function, renderApp?: Function }} DashboardClientDeps
  */
 
 /**
@@ -22,6 +25,9 @@ export function createDashboardClient(deps) {
   let activeSessionID = null;
   let latestCursor = null;
   let streamController = null;
+  let requestController = null;
+  let forestRefresh = null;
+  let pollingSignal = null;
   let pollTimer = null;
   let retryTimer = null;
   const render = deps.renderApp || renderApp;
@@ -32,6 +38,8 @@ export function createDashboardClient(deps) {
   };
   const headers = () => ({ Authorization: 'Bearer ' + token });
   const clean = () => {
+    if (requestController) requestController.abort();
+    requestController = null;
     if (streamController) streamController.abort();
     streamController = null;
     if (pollTimer !== null) deps.timers.clearInterval(pollTimer);
@@ -39,90 +47,161 @@ export function createDashboardClient(deps) {
     pollTimer = null;
     retryTimer = null;
   };
-  const fail = () => { commit({ type: 'errorEntered', message: GENERIC_ERROR }); };
+  const fail = (message = state.errorMessage || GENERIC_ERROR) => { commit({ type: 'errorEntered', message }); };
+  const accessDenied = () => {
+    token = '';
+    clean();
+    try { deps.sessionStorage?.removeItem(TOKEN_STORAGE_KEY); } catch { /* Storage pode estar bloqueado. */ }
+    fail(ACCESS_ERROR);
+  };
 
   const requestJson = async (url, signal) => {
-    const response = await deps.fetch(url, { headers: headers(), signal });
+    let response;
+    try {
+      response = await deps.fetch(url, { headers: headers(), signal });
+    } catch {
+      if (!signal?.aborted) fail(SERVER_ERROR);
+      return null;
+    }
+    if (signal?.aborted) return null;
+    if (response?.status === 401) {
+      accessDenied();
+      return null;
+    }
     if (!response || response.ok !== true || typeof response.json !== 'function') return null;
     try {
-      return await response.json();
-    } catch (error) {
-      if (error instanceof SyntaxError) return null;
+      const value = await response.json();
+      return signal?.aborted ? null : value;
+    } catch {
       return null;
     }
   };
 
+  const scopeQuery = () => new URLSearchParams(state.selection.mode === 'all'
+    ? { scope: 'all', includeSystem: String(state.includeSystem) }
+    : { rootSessionID: rootSessionID || '', selectedSessionID: activeSessionID || '', scope: state.selection.mode, includeSystem: String(state.includeSystem) });
   const eventsUrl = (direction, cursor) => {
-    const query = new URLSearchParams({ rootSessionID: rootSessionID || '', selectedSessionID: activeSessionID || '', scope: scope(), includeSystem: String(state.includeSystem) });
+    const query = scopeQuery();
     if (direction) query.set('direction', direction);
     if (cursor) query.set('cursor', cursor);
     query.set('limit', '200');
     return '/events?' + query.toString();
   };
   const streamUrl = () => {
-    const query = new URLSearchParams({ rootSessionID: rootSessionID || '', selectedSessionID: activeSessionID || '', scope: scope(), includeSystem: String(state.includeSystem) });
+    const query = scopeQuery();
     if (latestCursor) query.set('cursor', latestCursor);
     return '/events/stream?' + query.toString();
   };
-  const scope = () => (state.selection.mode === 'session' ? 'session' : 'subtree');
   const preorder = (node) => {
     if (!node || typeof node.sessionID !== 'string') return [];
     const children = Array.isArray(node.children) ? node.children.flatMap(preorder) : [];
     return [node.sessionID, ...children];
   };
+  const findNode = (node, sessionID) => {
+    if (node.sessionID === sessionID) return node;
+    for (const child of node.children || []) {
+      const found = findNode(child, sessionID);
+      if (found) return found;
+    }
+    return null;
+  };
+  const selectedMembers = (trees) => state.selection.mode === 'all'
+    ? trees.flatMap(preorder)
+    : trees.flatMap((tree) => preorder(findNode(tree, state.selection.sessionID)));
+  const loadForest = async (signal) => {
+    const filter = '?includeSystem=' + String(state.includeSystem);
+    const body = await requestJson('/sessions/roots' + filter, signal);
+    if (!body || !Array.isArray(body.roots)) return null;
+    const roots = body.roots;
+    if (roots.some((root) => typeof root.sessionID !== 'string')) return null;
+    const bodies = await Promise.all(roots.map((root) => requestJson('/sessions/' + encodeURIComponent(root.sessionID) + '/tree' + filter, signal)));
+    if (signal.aborted || bodies.some((body, index) => body?.tree?.sessionID !== roots[index].sessionID)) return null;
+    return { roots, trees: bodies.map((body) => body.tree) };
+  };
+  const refreshForest = async () => {
+    const signal = requestController?.signal;
+    if (!signal || signal.aborted) return;
+    if (forestRefresh?.signal === signal) {
+      forestRefresh.pending = true;
+      return;
+    }
+    const refresh = { signal, pending: false };
+    forestRefresh = refresh;
+    try {
+      do {
+        refresh.pending = false;
+        const forest = await loadForest(signal);
+        if (signal.aborted) return;
+        if (!forest) return fail();
+        commit({ type: 'forestUpdated', ...forest, subtreeSessionIDs: selectedMembers(forest.trees) });
+      } while (refresh.pending);
+    } finally {
+      if (forestRefresh === refresh) forestRefresh = null;
+    }
+  };
+  const reconcileForest = (events) => events.some((event) => !state.trees.some((tree) => findNode(tree, event.sessionID)))
+    ? refreshForest()
+    : Promise.resolve();
 
   const bootstrap = async (action) => {
     clean();
     commit(action);
-    const boot = await requestJson('/bootstrap');
-    if (!boot) return fail();
-    const roots = Array.isArray(boot.roots) ? boot.roots : [];
-    const newestRoot = roots.at(-1);
-    const hasActiveRoot = typeof boot.activeRootSessionID === 'string';
-    rootSessionID = hasActiveRoot
-      ? boot.activeRootSessionID
-      : typeof newestRoot?.sessionID === 'string' ? newestRoot.sessionID : null;
-    if (rootSessionID === null) return fail();
-    activeSessionID = state.selection.sessionID || rootSessionID;
-    latestCursor = hasActiveRoot && typeof boot.cursor === 'string' ? boot.cursor : null;
-    const encoded = encodeURIComponent(rootSessionID);
-    const treeBody = await requestJson('/sessions/' + encoded + '/tree?includeSystem=' + String(state.includeSystem));
-    const page = await requestJson(eventsUrl(null, null));
-    if (!treeBody || !page || !Array.isArray(page.events)) return fail();
-    commit({ type: 'bootstrapReady', roots, tree: treeBody.tree || null, subtreeSessionIDs: preorder(treeBody.tree), page });
-    await openStream();
+    if (!token) return accessDenied();
+    const controller = new AbortController();
+    requestController = controller;
+    const signal = controller.signal;
+    latestCursor = null;
+    const forest = await loadForest(signal);
+    if (signal.aborted) return;
+    if (!forest) return fail();
+    activeSessionID = state.selection.sessionID;
+    const root = forest.trees.find((tree) => findNode(tree, activeSessionID));
+    rootSessionID = root?.sessionID || null;
+    if (state.selection.mode !== 'all' && !root) {
+      activeSessionID = null;
+      commit({ type: 'selectionChanged', mode: 'all' });
+    }
+    const page = await requestJson(eventsUrl(null, null), signal);
+    if (signal.aborted) return;
+    if (!page || !Array.isArray(page.events)) return fail();
+    latestCursor = typeof page.newerCursor === 'string' ? page.newerCursor : null;
+    commit({ type: 'bootstrapReady', ...forest, subtreeSessionIDs: selectedMembers(forest.trees), page });
+    await Promise.all([openStream(), reconcileForest(page.events)]);
   };
 
   const openStream = async () => {
-    if (!rootSessionID || !activeSessionID) return;
+    if (!requestController || requestController.signal.aborted || !token) return;
     if (streamController) streamController.abort();
-    streamController = new AbortController();
+    const controller = new AbortController();
+    streamController = controller;
     let response;
     try {
-      response = await deps.fetch(streamUrl(), { headers: headers(), signal: streamController.signal });
-    } catch (error) {
-      if (error instanceof Error) return streamFailed();
-      return streamFailed();
+      response = await deps.fetch(streamUrl(), { headers: headers(), signal: controller.signal });
+    } catch {
+      if (!controller.signal.aborted) streamFailed();
+      return;
     }
+    if (controller.signal.aborted) return;
+    if (response?.status === 401) return accessDenied();
     if (!response || response.ok !== true || !response.body || typeof response.body.getReader !== 'function') return streamFailed();
-    void readSse(response.body.getReader());
+    void readSse(response.body.getReader(), controller.signal);
   };
 
-  const readSse = async (reader) => {
+  const readSse = async (reader, signal) => {
     const decoder = new TextDecoder();
     let buffer = '';
     try {
       while (true) {
         const chunk = await reader.read();
+        if (signal.aborted) return;
         if (chunk.done) return streamFailed();
         buffer += decoder.decode(chunk.value, { stream: true });
         const frames = buffer.split('\n\n');
         buffer = frames.pop() || '';
         for (const frame of frames) acceptFrame(frame);
       }
-    } catch (error) {
-      if (error instanceof Error) streamFailed();
-      else streamFailed();
+    } catch {
+      if (!signal.aborted) streamFailed();
     }
   };
 
@@ -134,11 +213,15 @@ export function createDashboardClient(deps) {
       if (!payload || typeof payload.cursor !== 'string' || !payload.event) return;
       latestCursor = payload.cursor;
       commit({ type: 'streamSuccess' });
-      commit({ type: 'streamEvent', event: payload.event });
+      acceptEvent(payload.event);
     } catch (error) {
       if (error instanceof SyntaxError) return;
       return;
     }
+  };
+  const acceptEvent = (event) => {
+    commit({ type: 'streamEvent', event });
+    void reconcileForest([event]);
   };
 
   const streamFailed = () => {
@@ -151,11 +234,19 @@ export function createDashboardClient(deps) {
     pollTimer = deps.timers.setInterval(() => { void poll(); }, POLL_INTERVAL_MS);
   };
   const poll = async () => {
-    const page = await requestJson(eventsUrl('newer', latestCursor));
-    if (!page || !Array.isArray(page.events)) return fail();
-    if (typeof page.nextCursor === 'string') latestCursor = page.nextCursor;
-    for (const event of page.events) commit({ type: 'streamEvent', event });
-    commit({ type: 'streamSuccess' });
+    const signal = requestController?.signal;
+    if (!signal || signal.aborted || pollingSignal === signal) return;
+    pollingSignal = signal;
+    try {
+      const page = await requestJson(eventsUrl('newer', latestCursor), signal);
+      if (signal.aborted) return;
+      if (!page || !Array.isArray(page.events)) return fail();
+      if (typeof page.newerCursor === 'string') latestCursor = page.newerCursor;
+      for (const event of page.events) acceptEvent(event);
+      commit({ type: 'pollSuccess' });
+    } finally {
+      if (pollingSignal === signal) pollingSignal = null;
+    }
   };
   const reset = async (action) => bootstrap(action);
 
@@ -186,22 +277,29 @@ export function createDashboardClient(deps) {
     start: async () => {
       token = deps.location.hash.slice(1);
       deps.history.replaceState(null, '', deps.location.pathname + deps.location.search);
+      try {
+        if (token) deps.sessionStorage?.setItem(TOKEN_STORAGE_KEY, token);
+        else token = deps.sessionStorage?.getItem(TOKEN_STORAGE_KEY) || '';
+      } catch { /* A URL de lançamento funciona mesmo sem armazenamento na aba. */ }
       bind();
-      if (token.length === 0) return fail();
+      if (token.length === 0) return accessDenied();
       await bootstrap({ type: 'bootstrapStarted' });
     },
     stop: () => { clean(); },
     getState: () => state,
     loadOlder: async () => {
-      if (!state.olderCursor) return;
-      const page = await requestJson(eventsUrl('older', state.olderCursor));
+      const signal = requestController?.signal;
+      if (!state.olderCursor || !signal || signal.aborted) return;
+      const page = await requestJson(eventsUrl('older', state.olderCursor), signal);
+      if (signal.aborted) return;
       if (!page || !Array.isArray(page.events)) return fail();
       commit({ type: 'pageAppended', page });
+      await reconcileForest(page.events);
     },
     setIncludeSystem: async (includeSystem) => reset({ type: 'includeSystemChanged', includeSystem }),
-    selectAll: async () => { activeSessionID = rootSessionID; await reset({ type: 'selectionChanged', mode: 'all' }); },
-    selectSession: async (sessionID) => { activeSessionID = sessionID; await reset({ type: 'selectionChanged', mode: 'session', sessionID }); },
-    selectSubtree: async (sessionID) => { activeSessionID = sessionID; await reset({ type: 'selectionChanged', mode: 'subtree', sessionID }); },
+    selectAll: async () => reset({ type: 'selectionChanged', mode: 'all' }),
+    selectSession: async (sessionID) => reset({ type: 'selectionChanged', mode: 'session', sessionID }),
+    selectSubtree: async (sessionID) => reset({ type: 'selectionChanged', mode: 'subtree', sessionID }),
     reload: async () => reset({ type: 'reloadRequested' })
   };
   return api;
@@ -213,6 +311,7 @@ export function startDashboard() {
     fetch: fetch.bind(globalThis),
     location,
     history,
+    get sessionStorage() { return globalThis.sessionStorage; },
     timers: { setTimeout: setTimeout.bind(globalThis), setInterval: setInterval.bind(globalThis), clearInterval: clearInterval.bind(globalThis) },
     root: document.getElementById('dashboard-root')
   });

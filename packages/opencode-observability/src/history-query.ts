@@ -18,6 +18,7 @@ import {
 } from './history-query-contracts';
 import { buildSessionLineageForest } from './lineage-tree';
 import type { LineageNode } from './lineage-tree';
+import { hasValidHistoryScope } from './history-scope';
 
 /**
  * Narrow read port for lineage queries. `HistoryPersistence` satisfies this
@@ -79,17 +80,18 @@ export function getLineageTree(
   return root ? { ok: true, root } : { ok: false, code: 'ROOT_UNKNOWN' };
 }
 
-export type LineageScope = 'session' | 'subtree';
+export type LineageScope = 'all' | 'session' | 'subtree';
 
 export interface LineageScopeQuery {
-  readonly rootSessionID: string;
-  readonly selectedSessionID: string;
+  readonly rootSessionID?: string | undefined;
+  readonly selectedSessionID?: string | undefined;
   readonly scope: LineageScope;
   /** Default `false` — matches `buildSessionLineageForest`. */
   readonly includeSystem?: boolean;
 }
 
 export type ScopeFailureCode =
+  | 'SCOPE_INVALID'
   | 'ROOT_UNKNOWN'
   | 'SESSION_NOT_UNDER_ROOT'
   | 'SESSION_HIDDEN'
@@ -106,6 +108,7 @@ export type ResolveScopeResult =
  * selected node in the M2 visible forest — the selected session first, then
  * descendants children-first, siblings by `observedAtMs` then `sessionID`.
  * `session` scope yields exactly `[selectedSessionID]`.
+ * `all` percorre todas as raízes visíveis e não recebe IDs de seleção.
  *
  * Failure codes, checked in this order:
  * 1. `ROOT_UNKNOWN` — `rootSessionID` is not a visible root (unknown, or a
@@ -121,10 +124,13 @@ export type ResolveScopeResult =
  * Pure: no mutation, no exceptions, no storage access, no content logging.
  */
 export function resolveScope(lineages: readonly SessionLineage[], query: LineageScopeQuery): ResolveScopeResult {
+  if (!hasValidHistoryScope(query)) return { ok: false, code: 'SCOPE_INVALID' };
   const includeSystem = query.includeSystem ?? false;
   const forest = buildSessionLineageForest(lineages, { includeSystem });
+  if (query.scope === 'all') return { ok: true, sessionIDs: forest.roots.flatMap(preorderIDs) };
   const root = forest.roots.find((r) => r.sessionID === query.rootSessionID);
   if (!root) return { ok: false, code: 'ROOT_UNKNOWN' };
+  if (query.selectedSessionID === undefined) return { ok: false, code: 'SESSION_UNKNOWN' };
 
   const selected = findNode(root, query.selectedSessionID);
   if (!selected) {
@@ -203,6 +209,8 @@ export type HistoryEventReadSource = HistoryLineageSource & {
  * select STRICTLY before/after the boundary, every walk visits each matching
  * event exactly once. `nextCursor` is emitted only while `hasMore` is true
  * (`null` on the final or an empty page).
+ * `newerCursor` avança após o último evento de qualquer página não vazia,
+ * inclusive a última, para polling e conexão inicial de SSE no mesmo escopo.
  *
  * `resolvedRunID`: `session` scope only — returned when ALL matching events of
  * the selected session share exactly one `runID` (computed over the full
@@ -259,9 +267,13 @@ export function listEvents(source: HistoryEventReadSource, input: ListEventsInpu
 
   const resolvedRunID = input.scope === 'session' ? uniqueRunID(matching) : undefined;
   const page = resolvedRunID === undefined
-    ? { events, hasMore, nextCursor }
-    : { events, hasMore, nextCursor, resolvedRunID };
-  return { ok: true, page };
+     ? { events, hasMore, nextCursor }
+     : { events, hasMore, nextCursor, resolvedRunID };
+  const newest = events.at(-1);
+  return { ok: true, page: {
+    ...page,
+    ...(newest === undefined ? {} : { newerCursor: encodeHistoryCursor({ version: HISTORY_CURSOR_VERSION, ...context, direction: 'newer', boundary: boundaryOf(newest) }) })
+  } };
 }
 
 /**

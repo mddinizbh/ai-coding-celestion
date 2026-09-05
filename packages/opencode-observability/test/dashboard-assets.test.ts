@@ -357,7 +357,7 @@ describe('dashboard app.js client asset contract', () => {
 
   it('uses streaming fetch rather than EventSource and keeps CSP-safe sinks', () => {
     const app = readFileSync(new URL('../src/dashboard/app.js', import.meta.url), 'utf8');
-    for (const banned of ['EventSource', 'innerHTML', 'outerHTML', 'insertAdjacentHTML', 'eval(', 'new Function', 'localStorage', 'sessionStorage']) {
+    for (const banned of ['EventSource', 'innerHTML', 'outerHTML', 'insertAdjacentHTML', 'eval(', 'new Function', 'localStorage']) {
       assert.ok(!app.includes(banned), `app.js must not use ${banned}`);
     }
     assert.ok(app.includes('fetch('));

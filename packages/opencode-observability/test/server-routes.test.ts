@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { compareBoundaries, type HistoryCursorBoundary } from '../src/history-cursor';
+import { compareBoundaries, decodeHistoryCursor, type HistoryCursorBoundary } from '../src/history-cursor';
 import type { SessionHistoryEvent, SessionLineage } from '../src/history-domain';
 import type { ListEventsInput } from '../src/history-query-contracts';
 import { createHistoryQuery, type HistoryEventReadSource, type HistoryQueryService } from '../src/history-query';
@@ -266,7 +266,13 @@ describe('GET /events — success translation', () => {
       ['rootSessionID', 'rootA'], ['selectedSessionID', 'workC'], ['scope', 'session'], ['includeSystem', 'false']
     ]);
     assert.equal(response.status, 200);
-    assert.deepStrictEqual(jsonBody(response), {
+    const { newerCursor, ...page } = JSON.parse(response.body);
+    const decoded = decodeHistoryCursor(newerCursor);
+    assert.ok(decoded.ok);
+    assert.equal(decoded.value.scope, 'session');
+    assert.equal(decoded.value.direction, 'newer');
+    assert.deepEqual(decoded.value.boundary, { timestampMs: 1002, sessionID: 'workC', runID: 'r1', sequence: 3 });
+    assert.deepStrictEqual(page, {
       events: [ev('workC', 'r1', 2, 1001), ev('workC', 'r1', 3, 1002)],
       hasMore: false,
       nextCursor: null,
@@ -277,7 +283,13 @@ describe('GET /events — success translation', () => {
   it('omits the resolvedRunID key entirely for subtree scope', () => {
     const response = route('/events', eventsBase);
     assert.equal(response.status, 200);
-    assert.deepStrictEqual(jsonBody(response), {
+    const { newerCursor, ...page } = JSON.parse(response.body);
+    const decoded = decodeHistoryCursor(newerCursor);
+    assert.ok(decoded.ok);
+    assert.equal(decoded.value.scope, 'subtree');
+    assert.equal(decoded.value.direction, 'newer');
+    assert.deepEqual(decoded.value.boundary, { timestampMs: 1003, sessionID: 'workD', runID: 'r1', sequence: 4 });
+    assert.deepStrictEqual(page, {
       events: [ev('rootA', 'r1', 1, 1000), ev('workC', 'r1', 2, 1001), ev('workC', 'r1', 3, 1002), ev('workD', 'r1', 4, 1003)],
       hasMore: false,
       nextCursor: null

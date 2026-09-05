@@ -109,6 +109,43 @@ async function waitUntil(predicate: () => boolean, message: string): Promise<voi
 }
 
 describe('authenticated dashboard SSE stream', () => {
+  it('streams all roots, including sessions created after connection, while hiding system events', async () => {
+    const hub = new AppendHub();
+    const lineages = [lineage(ROOT)];
+    const { server, origin } = await withServer(source([], lineages), hub);
+    try {
+      const response = await openStream(origin + '/events/stream?scope=all&includeSystem=false');
+      lineages.push(lineage('new-root'), lineage('sys', 'new-root', 'system'), lineage('child', 'sys'));
+      hub.emit(event(1, 'sys'));
+      hub.emit(event(2, 'new-root'));
+      hub.emit(event(3, 'child'));
+      hub.emit(event(4, ROOT));
+      const frames = await collectDataFrames(response, 3);
+      assert.deepEqual(frames.map((f) => f.event.sessionID), ['new-root', 'child', ROOT]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('reconnects globally with the page cursor and rejects a cursor from a single tree', async () => {
+    const hub = new AppendHub();
+    const events = [event(1), event(2, 'other'), event(3)];
+    const queryService = source(events, [lineage(ROOT), lineage('other')]);
+    const { server, origin } = await withServer(queryService, hub);
+    try {
+      const page = queryService.listEvents({ scope: 'all', includeSystem: false, direction: 'newer', limit: 1 });
+      assert.ok(page.ok && page.page.newerCursor);
+      const response = await openStream(origin + '/events/stream?' + new URLSearchParams({ scope: 'all', includeSystem: 'false', cursor: page.page.newerCursor }));
+      const frames = await collectDataFrames(response, 2);
+      assert.deepEqual(frames.map((f) => f.event.eventID), ['event-other-2', 'event-root-3']);
+      const wrong = await fetch(origin + '/events/stream?' + new URLSearchParams({ scope: 'all', includeSystem: 'false', cursor: cursorFor(event(0)) }), { headers: { Authorization: `Bearer ${TOKEN}` } });
+      assert.equal(wrong.status, 400);
+      assert.deepEqual(await wrong.json(), { error: 'CURSOR_SCOPE_MISMATCH' });
+    } finally {
+      await server.stop();
+    }
+  });
+
   it('replays every event newer than the cursor across multiple pages with cursor+event envelopes', async () => {
     // Given
     const hub = new AppendHub();

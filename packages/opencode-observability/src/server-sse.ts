@@ -17,6 +17,7 @@ import type { HistoryQueryService } from './history-query';
 import type { ListEventsInput, ListEventsResult } from './history-query-contracts';
 import type { RouteRequest } from './server-routes';
 import { securityHeaders } from './server-security';
+import { hasValidHistoryScope, historyScopeShape } from './history-scope';
 
 export type StreamDiagnosticCode = 'STREAM_CLIENT_DROPPED' | 'STREAM_LISTENER_FAILED' | 'STREAM_WRITE_FAILED';
 
@@ -46,12 +47,10 @@ export interface DashboardStreamHandlerDeps {
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const BACKPRESSURE_LIMIT_BYTES = 1024 * 1024;
 const streamQuerySchema = z.object({
-  rootSessionID: z.string().min(1),
-  selectedSessionID: z.string().min(1),
-  scope: z.enum(['session', 'subtree']),
+  ...historyScopeShape,
   includeSystem: z.enum(['true', 'false']).transform((value) => value === 'true'),
   cursor: z.string().min(1).optional()
-}).strict();
+}).strict().refine(hasValidHistoryScope);
 
 export function createDashboardStreamRegistry(): DashboardStreamRegistry {
   const connections = new Set<DashboardStreamConnection>();
@@ -127,8 +126,8 @@ function parseStreamQuery(query: RouteRequest['query']): StreamQueryResult {
 }
 
 /**
- * Live membership is a snapshot resolved at connect time. Later lineage changes
- * do not alter this stream; clients reconnect when changing scope/filter state.
+ * Seleções locais usam o snapshot de conexão. all resolve o conjunto atual
+ * para incluir sessões novas sem perder o filtro de sessões de sistema.
  */
 async function runStream(input: RunStreamInput): Promise<void> {
   const buffered: SessionHistoryEvent[] = [];
@@ -154,7 +153,10 @@ async function runStream(input: RunStreamInput): Promise<void> {
   };
   const listener = (event: SessionHistoryEvent): void => {
     try {
-      if (!input.membership.has(event.sessionID)) return;
+      if (input.context.scope === 'all') {
+        const current = input.deps.queryService.resolveScope(input.context);
+        if (!current.ok || !current.sessionIDs.includes(event.sessionID)) return;
+      } else if (!input.membership.has(event.sessionID)) return;
       if (replaying) buffered.push(event);
       else emit(event);
     } catch {
@@ -178,21 +180,23 @@ async function runStream(input: RunStreamInput): Promise<void> {
     if (closed) return;
     if (!input.response.write(': hb\n\n')) checkBackpressure(input.response, input.deps.backpressureLimitBytes ?? BACKPRESSURE_LIMIT_BYTES, report, cleanup);
   }, input.deps.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS);
-  if (input.cursor !== undefined) await replayAll(input.cursor, input.context, input.deps.queryService, emit);
+  // all sem cursor vem de uma página inicialmente vazia. A assinatura acima
+  // precede o replay para cobrir eventos que chegaram entre a página e o SSE.
+  if (input.cursor !== undefined || input.context.scope === 'all') await replayAll(input.cursor, input.context, input.deps.queryService, emit);
   replaying = false;
   buffered.sort((a, b) => compareBoundaries(boundaryOf(a), boundaryOf(b)));
   for (const event of buffered) emit(event);
 }
 
-async function replayAll(cursor: string, context: HistoryCursorContext, queryService: HistoryQueryService, emit: (event: SessionHistoryEvent) => void): Promise<void> {
+async function replayAll(cursor: string | undefined, context: HistoryCursorContext, queryService: HistoryQueryService, emit: (event: SessionHistoryEvent) => void): Promise<void> {
   let nextCursor: string | undefined = cursor;
-  while (nextCursor !== undefined) {
+  do {
     const input: ListEventsInput = { ...context, direction: 'newer', cursor: nextCursor };
     const result: ListEventsResult = queryService.listEvents(input);
     if (!result.ok) return;
     for (const event of result.page.events) emit(event);
     nextCursor = result.page.nextCursor ?? undefined;
-  }
+  } while (nextCursor !== undefined);
 }
 
 function checkBackpressure(response: http.ServerResponse, limit: number, report: (code: StreamDiagnosticCode) => void, cleanup: (destroy: boolean) => void): void {

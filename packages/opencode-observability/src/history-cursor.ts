@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { hasValidHistoryScope, historyScopeShape } from './history-scope';
 
 export const HISTORY_CURSOR_VERSION = 1 as const;
 
@@ -14,14 +15,11 @@ export const historyCursorBoundarySchema = z.object({
 }).strict();
 
 export const historyCursorContextSchema = z.object({
-  rootSessionID: nonEmptyString,
-  selectedSessionID: nonEmptyString,
-  scope: z.enum(['session', 'subtree']),
-  includeSystem: z.boolean(),
+  ...historyScopeShape,
   direction: z.enum(['older', 'newer'])
-}).strict();
+}).strict().refine(hasValidHistoryScope);
 
-export const historyCursorPayloadSchema = historyCursorContextSchema.extend({
+export const historyCursorPayloadSchema = historyCursorContextSchema.safeExtend({
   version: z.literal(HISTORY_CURSOR_VERSION),
   boundary: historyCursorBoundarySchema
 }).strict();

@@ -167,13 +167,17 @@ function handleEvents(_params: Readonly<Record<string, string>>, query: QueryPai
   if (!parsed.ok) return errorResponse(400, parsed.code);
   const values = parsed.values;
 
-  const rootSessionID = requiredString(values, 'rootSessionID');
-  if (!rootSessionID.ok) return errorResponse(400, rootSessionID.code);
-  const selectedSessionID = requiredString(values, 'selectedSessionID');
-  if (!selectedSessionID.ok) return errorResponse(400, selectedSessionID.code);
   const scope = requiredString(values, 'scope');
   if (!scope.ok) return errorResponse(400, scope.code);
-  if (scope.value !== 'session' && scope.value !== 'subtree') return errorResponse(400, 'PARAM_INVALID');
+  if (scope.value !== 'all' && scope.value !== 'session' && scope.value !== 'subtree') return errorResponse(400, 'PARAM_INVALID');
+  if (scope.value === 'all') {
+    if (values['rootSessionID'] !== undefined || values['selectedSessionID'] !== undefined) return errorResponse(400, 'PARAM_INVALID');
+  } else {
+    for (const key of ['rootSessionID', 'selectedSessionID']) {
+      const required = requiredString(values, key);
+      if (!required.ok) return errorResponse(400, required.code);
+    }
+  }
   const includeSystem = values['includeSystem'] === undefined
     ? { ok: false as const, code: 'PARAM_MISSING' as const }
     : parseBool(values['includeSystem']);
@@ -187,8 +191,7 @@ function handleEvents(_params: Readonly<Record<string, string>>, query: QueryPai
   if (limitRaw !== undefined && !/^-?\d+$/.test(limitRaw)) return errorResponse(400, 'LIMIT_INVALID');
 
   const input: ListEventsInput = {
-    rootSessionID: rootSessionID.value,
-    selectedSessionID: selectedSessionID.value,
+    ...(scope.value === 'all' ? {} : { rootSessionID: values['rootSessionID'], selectedSessionID: values['selectedSessionID'] }),
     scope: scope.value,
     includeSystem: includeSystem.value,
     ...(direction !== undefined ? { direction } : {}),

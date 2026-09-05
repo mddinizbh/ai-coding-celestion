@@ -12,23 +12,25 @@ export const SSE_FAILURE_THRESHOLD = 3;
  * @typedef {'sse' | 'polling'} ConnectionMode
  * @typedef {'all' | 'session' | 'subtree'} SelectionMode
  * @typedef {{ eventID: string, runID: string, sessionID: string, sequence: number, timestampMs: number, type: string }} HistoryEvent
- * @typedef {{ events: readonly HistoryEvent[], hasMore: boolean, nextCursor: string | null, resolvedRunID?: string }} HistoryEventPage
+ * @typedef {{ events: readonly HistoryEvent[], hasMore: boolean, nextCursor: string | null, newerCursor?: string, resolvedRunID?: string }} HistoryEventPage
  * @typedef {{ sessionID: string, sanitizedTitle?: string, agent?: string | null, kind?: string, observedAtMs?: number }} LineageRootSummary
- * @typedef {{ sessionID: string, children?: readonly LineageNode[] }} LineageNode
+ * @typedef {LineageRootSummary & { children?: readonly LineageNode[] }} LineageNode
  * @typedef {{ mode: SelectionMode, sessionID: string | null }} SelectionState
  * @typedef {{ mode: ConnectionMode, consecutiveFailures: number, pollIntervalMs: number }} ConnectionState
- * @typedef {{ events: readonly HistoryEvent[], roots: readonly LineageRootSummary[], tree: LineageNode | null, subtreeSessionIDs: readonly string[], selection: SelectionState, includeSystem: boolean, olderCursor: string | null, newerCursor: string | null, status: DashboardStatus, connection: ConnectionState, errorMessage: string | null }} DashboardState
+ * @typedef {{ events: readonly HistoryEvent[], roots: readonly LineageRootSummary[], trees: readonly LineageNode[], subtreeSessionIDs: readonly string[], selection: SelectionState, includeSystem: boolean, olderCursor: string | null, newerCursor: string | null, status: DashboardStatus, connection: ConnectionState, errorMessage: string | null }} DashboardState
  * @typedef {{ type: 'bootstrapStarted' }} BootstrapStartedAction
- * @typedef {{ type: 'bootstrapReady', roots: readonly LineageRootSummary[], tree: LineageNode | null, subtreeSessionIDs: readonly string[], page: HistoryEventPage }} BootstrapReadyAction
+ * @typedef {{ type: 'bootstrapReady', roots: readonly LineageRootSummary[], trees: readonly LineageNode[], subtreeSessionIDs: readonly string[], page: HistoryEventPage }} BootstrapReadyAction
+ * @typedef {{ type: 'forestUpdated', roots: readonly LineageRootSummary[], trees: readonly LineageNode[], subtreeSessionIDs: readonly string[] }} ForestUpdatedAction
  * @typedef {{ type: 'pageAppended', page: HistoryEventPage, cursor?: string | null }} PageAppendedAction
  * @typedef {{ type: 'streamEvent', event: HistoryEvent }} StreamEventAction
  * @typedef {{ type: 'streamFailure' }} StreamFailureAction
  * @typedef {{ type: 'streamSuccess' }} StreamSuccessAction
+ * @typedef {{ type: 'pollSuccess' }} PollSuccessAction
  * @typedef {{ type: 'reloadRequested' }} ReloadRequestedAction
  * @typedef {{ type: 'selectionChanged', mode: SelectionMode, sessionID?: string | null }} SelectionChangedAction
  * @typedef {{ type: 'includeSystemChanged', includeSystem: boolean }} IncludeSystemChangedAction
  * @typedef {{ type: 'errorEntered', message: string }} ErrorEnteredAction
- * @typedef {BootstrapStartedAction | BootstrapReadyAction | PageAppendedAction | StreamEventAction | StreamFailureAction | StreamSuccessAction | ReloadRequestedAction | SelectionChangedAction | IncludeSystemChangedAction | ErrorEnteredAction} DashboardAction
+ * @typedef {BootstrapStartedAction | BootstrapReadyAction | ForestUpdatedAction | PageAppendedAction | StreamEventAction | StreamFailureAction | StreamSuccessAction | PollSuccessAction | ReloadRequestedAction | SelectionChangedAction | IncludeSystemChangedAction | ErrorEnteredAction} DashboardAction
  */
 
 const emptyConnection = Object.freeze({ mode: 'sse', consecutiveFailures: 0, pollIntervalMs: POLL_INTERVAL_MS });
@@ -41,7 +43,7 @@ export function createDashboardState() {
   return {
     events: [],
     roots: [],
-    tree: null,
+    trees: [],
     subtreeSessionIDs: [],
     selection: { mode: 'all', sessionID: null },
     includeSystem: false,
@@ -69,14 +71,16 @@ export function dashboardReducer(state, action) {
         ...resetTransport(state),
         events,
         roots: [...action.roots],
-        tree: action.tree,
+        trees: [...action.trees],
         subtreeSessionIDs: [...action.subtreeSessionIDs],
         olderCursor: action.page.nextCursor,
-        newerCursor: null,
+        newerCursor: action.page.newerCursor ?? null,
         status: statusFor(events),
         errorMessage: null
       };
     }
+    case 'forestUpdated':
+      return { ...state, roots: [...action.roots], trees: [...action.trees], subtreeSessionIDs: [...action.subtreeSessionIDs] };
     case 'pageAppended': {
       const events = mergeEvents(state.events, action.page.events);
       return {
@@ -98,6 +102,8 @@ export function dashboardReducer(state, action) {
     }
     case 'streamSuccess':
       return { ...state, connection: emptyConnection };
+    case 'pollSuccess':
+      return { ...state, connection: { ...emptyConnection, mode: 'polling' }, status: statusFor(state.events), errorMessage: null };
     case 'reloadRequested':
       return loadingState(state);
     case 'selectionChanged':

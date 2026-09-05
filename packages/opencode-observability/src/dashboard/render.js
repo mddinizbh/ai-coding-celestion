@@ -219,20 +219,20 @@ function treeItem(node, selection) {
 }
 
 /**
- * Renders the recursive lineage tree into the tree landmark. A missing
- * tree renders a muted placeholder row instead of an empty list.
+ * Renderiza todas as árvores de sessões no mesmo painel, sem raiz artificial.
  * @param {Element} container landmark with id "tree" (ul, role tree)
- * @param {object | null} tree lineage root node from the bootstrap state
+ * @param {readonly object[]} trees raízes visíveis carregadas pelo cliente
  * @param {{ mode: 'all' | 'session' | 'subtree', sessionID: string | null }} selection
  * @returns {void}
  */
-export function renderTree(container, tree, selection) {
+export function renderTree(container, trees, selection) {
   clear(container);
-  if (!tree || typeof tree.sessionID !== 'string') {
+  const roots = Array.isArray(trees) ? trees.filter((tree) => tree && typeof tree.sessionID === 'string') : [];
+  if (roots.length === 0) {
     container.appendChild(el('li', 'tree-empty', 'No sessions in scope.'));
     return;
   }
-  container.appendChild(treeItem(tree, selection));
+  for (const tree of roots) container.appendChild(treeItem(tree, selection));
 }
 
 /**
@@ -337,14 +337,15 @@ export function renderApp(root, state, options = {}) {
   if (allButton) allButton.setAttribute('aria-pressed', state.selection.mode === 'all' ? 'true' : 'false');
 
   const treeBox = find('tree');
-  if (treeBox) renderTree(treeBox, state.tree, state.selection);
+  if (treeBox) renderTree(treeBox, state.trees, state.selection);
 
   const count = find('timeline-count');
   if (count) count.textContent = String(events.length) + (events.length === 1 ? ' event' : ' events');
 
   const timelineBox = find('timeline');
   if (timelineBox) {
-    renderTimeline(timelineBox, events, { nowMs: options.nowMs, agentBySession: agentMapFromTree(state.tree) });
+    const agents = new Map(state.trees.flatMap((tree) => [...agentMapFromTree(tree)]));
+    renderTimeline(timelineBox, events, { nowMs: options.nowMs, agentBySession: agents });
   }
 
   renderStatus(

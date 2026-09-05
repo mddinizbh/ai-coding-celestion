@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { measureContextMeta, type ContextSnapshot, type Clock } from '../src/measure';
 import { createContextObserver, type Sink, type FailureReporter } from '../src/observer';
+import { measureContextComponents } from '../src/measure-components';
 
 const fixedIso = '2026-09-01T00:00:00.000Z';
 const fixedClock: Clock = () => fixedIso;
@@ -66,5 +67,27 @@ describe('createContextObserver fail-open', () => {
     assert.equal(sinkCalled, false);
     assert.equal(diags.length, 1);
     assert.equal(diags[0], '[opencode-observability] measurement failed');
+  });
+});
+
+describe('Etapa B measureContextComponents (real sizing)', () => {
+  it('computes deterministic UTF-8 bytes per component + hook event', () => {
+    const ctx = {
+      sessionID: 's1',
+      agent: 'a1',
+      model: { providerID: 'anthropic', id: 'claude' },
+      system: [{ type: 'text', text: 'sys' }],
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: { t1: { description: 'd', input: {} } },
+      generation: { temperature: 0.7 },
+      providerOptions: { anthropic: { thinking: { type: 'enabled' } } }
+    } as const;
+    const sizes = measureContextComponents(ctx);
+    assert.equal(sizes.systemBytes, 30);
+    assert.equal(sizes.messagesBytes, 32);
+    assert.equal(sizes.toolsBytes, 37);
+    assert.equal(sizes.generationBytes, 19);
+    assert.equal(sizes.providerOptionsBytes, 45);
+    assert.equal(sizes.hookEventBytes, 307);
   });
 });

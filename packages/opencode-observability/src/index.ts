@@ -20,7 +20,7 @@ import { createDashboardAssets } from './server-assets';
 import { createDashboardServer, type DashboardServer, type DashboardServerDeps } from './server';
 import { createBrowserOpener, type BrowserOpener } from './browser-opener';
 import { createCelestionHistoryCommand, type CelestionHistoryCommand } from './history-command';
- 
+
   export { overviewDefinition };
 
 type M0Observer = ReturnType<typeof createContextObserver>;
